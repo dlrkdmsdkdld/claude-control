@@ -22,6 +22,12 @@ export function chooseSessionId(e: LinkEvidence): { sessionId: string; source: T
 
 export interface StatusInput {
   registryStatus: string | null;
+  /**
+   * The transcript was written after the registry's last update. Some CLI
+   * sessions (seen in Android Studio / GitKraken terminals) stop refreshing
+   * their registry status, so it can't be trusted over newer activity.
+   */
+  registryStale: boolean;
   hookStatus: SessionStatus | null;
   transcriptLinked: boolean;
   hasError: boolean;
@@ -30,12 +36,12 @@ export interface StatusInput {
 }
 
 /**
- * Status precedence: the CLI's own registry status, then claude-control hook
+ * Status precedence: the CLI's own registry status (unless stale), then claude-control hook
  * events, then the transcript heuristic. Without any of these the status is
  * "unknown" — an unlinked session is never reported as idle.
  */
 export function resolveStatus(input: StatusInput): { status: SessionStatus; source: ClaudeSession["statusSource"] } {
-  const fromRegistry = statusFromRegistry(input.registryStatus);
+  const fromRegistry = input.registryStale ? null : statusFromRegistry(input.registryStatus);
   if (fromRegistry) {
     if (fromRegistry === "idle" && input.hasError) return { status: "errored", source: "registry" };
     return { status: fromRegistry, source: "registry" };

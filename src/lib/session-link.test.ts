@@ -48,7 +48,13 @@ describe("chooseSessionId", () => {
 });
 
 describe("resolveStatus", () => {
-  const base = { registryStatus: null, hookStatus: null, transcriptLinked: false, hasError: false };
+  const base = {
+    registryStatus: null,
+    registryStale: false,
+    hookStatus: null,
+    transcriptLinked: false,
+    hasError: false,
+  };
 
   it("uses the registry status first", () => {
     const heuristic = vi.fn(() => "idle" as const);
@@ -67,6 +73,18 @@ describe("resolveStatus", () => {
     expect(resolveStatus({ ...base, registryStatus: "idle", hasError: true, heuristic: () => "idle" }).status).toBe(
       "errored",
     );
+  });
+
+  it("ignores a stale registry status when the transcript is newer (CLI stopped refreshing it)", () => {
+    expect(
+      resolveStatus({
+        ...base,
+        registryStatus: "idle",
+        registryStale: true,
+        transcriptLinked: true,
+        heuristic: () => "working",
+      }),
+    ).toEqual({ status: "working", source: "transcript" });
   });
 
   it("uses hooks when there is no registry", () => {

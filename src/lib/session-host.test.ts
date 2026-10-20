@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appBundleFromComm, detectSessionHost, hostAcceptsTerminalInput } from "./session-host";
+import { appBundleFromComm, detectSessionHost, hasToolChild, hostAcceptsTerminalInput } from "./session-host";
 import { isOrphaned } from "./terminal/detect";
 import type { ProcessTreeEntry } from "./terminal/types";
 
@@ -134,5 +134,29 @@ describe("appBundleFromComm", () => {
   it("returns the outermost bundle, keeping spaces", () => {
     expect(appBundleFromComm(`${VSCODE}/Contents/Frameworks/Code Helper.app/Contents/MacOS/Code Helper`)).toBe(VSCODE);
     expect(appBundleFromComm("/bin/zsh")).toBeNull();
+  });
+});
+
+describe("hasToolChild", () => {
+  const withElapsed = (entries: [number, number, string, number][]) =>
+    new Map<number, ProcessTreeEntry>(
+      entries.map(([pid, ppid, comm, elapsedSec]) => [pid, { ppid, cpuPercent: 0, comm, elapsedSec }]),
+    );
+
+  it("detects a tool process started after the tool_use (e.g. exec'd sleep)", () => {
+    const t = withElapsed([
+      [100, 200, "claude", 3600],
+      [300, 100, "sleep", 9],
+      [400, 100, "node", 3500],
+    ]);
+    expect(hasToolChild(100, t, 10_000)).toBe(true);
+  });
+
+  it("ignores long-lived children such as MCP servers", () => {
+    const t = withElapsed([
+      [100, 200, "claude", 3600],
+      [400, 100, "node", 3500],
+    ]);
+    expect(hasToolChild(100, t, 10_000)).toBe(false);
   });
 });

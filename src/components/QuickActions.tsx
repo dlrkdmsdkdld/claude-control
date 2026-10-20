@@ -213,6 +213,32 @@ export function QuickActions({
 
   const showPRButton = pid && acceptsInput && (status === "idle" || status === "waiting");
 
+  // Ends the claude process (SIGTERM, then SIGKILL). Two clicks so it can't be
+  // mistaken for a window switch.
+  const killButton = (
+    <IconButton
+      onClick={killSession}
+      tip={
+        killing
+          ? "종료하는 중..."
+          : killArmed
+            ? "한 번 더 클릭하면 이 claude 프로세스를 종료합니다"
+            : orphaned
+              ? "세션 종료 — 연결이 끊긴 claude 프로세스를 종료 (화면 전환 아님)"
+              : "세션 종료 — 이 claude 프로세스를 종료 (화면 전환 아님)"
+      }
+      className={`flex-1 flex items-center justify-center h-8 rounded-lg ${
+        killing || killArmed
+          ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
+          : "bg-white/4 hover:bg-orange-500/12 border border-white/7 hover:border-orange-500/25 text-zinc-500 hover:text-orange-400"
+      } transition-all duration-150`}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+      </svg>
+    </IconButton>
+  );
+
   return (
     <div className="w-full">
       <div className="flex items-center gap-1.5 w-full">
@@ -260,25 +286,7 @@ export function QuickActions({
                 </svg>
               </IconButton>
             )}
-            <IconButton
-              onClick={killSession}
-              tip={
-                killing
-                  ? "종료하는 중..."
-                  : killArmed
-                    ? "한 번 더 클릭하면 claude 프로세스를 종료합니다"
-                    : "세션 종료 — 연결이 끊긴 claude 프로세스를 종료 (화면 전환 아님)"
-              }
-              className={`flex-1 flex items-center justify-center h-8 rounded-lg ${
-                killing || killArmed
-                  ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
-                  : "bg-white/4 hover:bg-orange-500/12 border border-white/7 hover:border-orange-500/25 text-zinc-500 hover:text-orange-400"
-              } transition-all duration-150`}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </IconButton>
+            {killButton}
           </>
         ) : showFocus ? (
           <IconButton onClick={(e) => openAction(e, "focus")} tip={focusTip} className={`flex-1 ${iconBtnClass}`}>
@@ -407,6 +415,7 @@ export function QuickActions({
             />
           </svg>
         </IconButton>
+        {pid && !orphaned && killButton}
         {onCleanup && (
           <IconButton
             onClick={onCleanup}

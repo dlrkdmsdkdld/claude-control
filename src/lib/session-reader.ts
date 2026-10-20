@@ -17,6 +17,7 @@ interface JsonlLine {
   cwd?: string;
   gitBranch?: string;
   timestamp?: string;
+  isMeta?: boolean;
   message?: {
     role?: string;
     stop_reason?: string;
@@ -358,6 +359,45 @@ export function hasPendingToolUse(lines: JsonlLine[]): boolean {
 
     // If last message is user (could be tool_result or new input) → not pending
     return false;
+  }
+  return false;
+}
+
+/** Time (ms) of the last assistant tool_use still awaiting its result, or null. */
+export function pendingToolUseStartedAt(lines: JsonlLine[]): number | null {
+  if (!hasPendingToolUse(lines)) return null;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line.type === "assistant" && line.timestamp) {
+      const t = Date.parse(line.timestamp);
+      return isNaN(t) ? null : t;
+    }
+  }
+  return null;
+}
+
+/** User-role lines that are not a prompt Claude must answer (local slash commands, interrupts). */
+const NON_PROMPT_USER_TEXT = /^\s*(<command-name>|<local-command-|<command-message>|\[Request interrupted)/;
+
+/**
+ * True when the conversation's last meaningful entry is a user prompt or tool
+ * result — i.e. Claude owes a reply and is still working on the turn.
+ */
+export function isAwaitingAssistant(lines: JsonlLine[]): boolean {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    if (line.type !== "user" && line.type !== "assistant") continue;
+    if (!line.message || line.isMeta) continue;
+    if (line.type === "assistant") return false;
+    const content = line.message.content;
+    const text =
+      typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.find((b) => b.type === "text")?.text
+          : undefined;
+    if (text && NON_PROMPT_USER_TEXT.test(text)) return false;
+    return true;
   }
   return false;
 }

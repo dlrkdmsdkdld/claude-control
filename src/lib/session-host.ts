@@ -96,3 +96,16 @@ export function detectSessionHost(
 export function hostAcceptsTerminalInput(host: SessionHost): boolean {
   return host.kind === "terminal" || host.kind === "tmux";
 }
+
+/**
+ * Whether a tool is executing: the CLI runs Bash/tool commands as child
+ * processes, which start after the tool_use was written. Long-lived children
+ * (MCP servers) started with the session and are ignored.
+ */
+export function hasToolChild(pid: number, processTree: Map<number, ProcessTreeEntry>, sinceToolUseMs: number): boolean {
+  for (const entry of processTree.values()) {
+    if (entry.ppid !== pid || entry.elapsedSec === undefined) continue;
+    if (entry.elapsedSec * 1000 <= sinceToolUseMs + 2000) return true;
+  }
+  return false;
+}

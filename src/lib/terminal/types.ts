@@ -50,4 +50,6 @@ export interface ProcessTreeEntry {
   ppid: number;
   comm: string;
   cpuPercent: number;
+  /** Seconds since the process started (from ps etime) */
+  elapsedSec?: number;
 }

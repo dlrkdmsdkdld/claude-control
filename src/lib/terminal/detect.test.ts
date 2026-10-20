@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findClaudePidsFromTree, findTerminalInTree, isOrphaned, matchTerminal } from "./detect";
+import { findClaudePidsFromTree, findTerminalInTree, isOrphaned, matchTerminal, parseEtime } from "./detect";
 import type { ProcessTreeEntry } from "./types";
 
 describe("matchTerminal", () => {
@@ -228,5 +228,14 @@ describe("isOrphaned", () => {
       [1, { ppid: 0, cpuPercent: 0, comm: "launchd" }],
     ]);
     expect(isOrphaned(100, tree, false)).toBe(true);
+  });
+});
+
+describe("parseEtime", () => {
+  it("parses ps etime formats", () => {
+    expect(parseEtime("05:12")).toBe(312);
+    expect(parseEtime("01:02:03")).toBe(3723);
+    expect(parseEtime("03-22:37:56")).toBe(3 * 86400 + 22 * 3600 + 37 * 60 + 56);
+    expect(parseEtime("bogus")).toBeUndefined();
   });
 });

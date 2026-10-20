@@ -7,7 +7,9 @@ import {
   extractTaskSummary,
   hasPendingToolUse,
   isAskingForInput,
+  isAwaitingAssistant,
   lastMessageHasError,
+  pendingToolUseStartedAt,
   linesToConversation,
 } from "./session-reader";
 
@@ -317,6 +319,53 @@ describe("hasPendingToolUse", () => {
   it("skips progress lines", () => {
     const lines = [assistantLine([toolUseBlock("Read", { file_path: "/x" })]), { type: "progress" }];
     expect(hasPendingToolUse(lines)).toBe(true);
+  });
+});
+
+describe("pendingToolUseStartedAt", () => {
+  it("returns the pending tool_use time", () => {
+    const lines = [userLine("go"), assistantLine([toolUseBlock("Bash")], { timestamp: "2026-10-20T10:34:29.000Z" })];
+    expect(pendingToolUseStartedAt(lines)).toBe(Date.parse("2026-10-20T10:34:29.000Z"));
+  });
+
+  it("is null once the tool has a result", () => {
+    const toolResult = { type: "user", message: { role: "user", content: [{ type: "tool_result" }] } };
+    expect(
+      pendingToolUseStartedAt([
+        assistantLine([toolUseBlock("Bash")], { timestamp: "2026-10-20T10:34:29Z" }),
+        toolResult,
+      ]),
+    ).toBeNull();
+  });
+});
+
+describe("isAwaitingAssistant", () => {
+  it("is true right after a prompt, before Claude replies", () => {
+    expect(isAwaitingAssistant([assistantLine([textBlock("Hi")]), userLine("Fix the build")])).toBe(true);
+  });
+
+  it("is true after a tool result (Claude continues the turn)", () => {
+    const toolResult = { type: "user", message: { role: "user", content: [{ type: "tool_result" }] } };
+    expect(isAwaitingAssistant([assistantLine([toolUseBlock("Bash")]), toolResult])).toBe(true);
+  });
+
+  it("is false once Claude has replied", () => {
+    expect(isAwaitingAssistant([userLine("Fix it"), assistantLine([textBlock("Done.")])])).toBe(false);
+  });
+
+  it("is false after an interrupt or a local slash command", () => {
+    expect(isAwaitingAssistant([userLine("Fix it"), userLine("[Request interrupted by user]")])).toBe(false);
+    expect(isAwaitingAssistant([userLine("<command-name>/model</command-name>")])).toBe(false);
+  });
+
+  it("skips meta and non-message lines", () => {
+    expect(
+      isAwaitingAssistant([
+        assistantLine([textBlock("Done.")]),
+        userLine("Caveat: local command output", { isMeta: true }),
+        { type: "system" },
+      ]),
+    ).toBe(false);
   });
 });
 

@@ -13,7 +13,7 @@ import {
   ProcessInfo,
   sessionIdFromArgs,
 } from "./process-utils";
-import { detectSessionHost, hostAcceptsTerminalInput } from "./session-host";
+import { detectSessionHost, hasToolChild, hostAcceptsTerminalInput } from "./session-host";
 import { chooseSessionId, pickInferredTranscript, resolveStatus, TranscriptCandidate } from "./session-link";
 import { loadSessionMeta } from "./session-meta";
 import {
@@ -25,7 +25,9 @@ import {
   getJsonlMtime,
   hasPendingToolUse,
   isAskingForInput,
+  isAwaitingAssistant,
   lastMessageHasError,
+  pendingToolUseStartedAt,
   linesToConversation,
   readFullConversation,
   readJsonlHead,
@@ -78,6 +80,11 @@ let lastOrphanCheck = 0;
 let orphanedPids = new Set<number>();
 let pidTmuxSession = new Map<number, string>();
 let pidHasTty = new Map<number, boolean>();
+
+/** Transcript writes this much newer than the registry's last update mean its status is stale. */
+const REGISTRY_STALE_MS = 3000;
+/** A prompt left unanswered longer than this is not treated as an in-progress turn. */
+const AWAITING_REPLY_MAX_MS = 5 * 60 * 1000;
 
 /** Sessions whose process exited recently — kept briefly so the card shows "Finished". */
 const FINISHED_RETENTION_MS = 2 * 60 * 1000;
@@ -138,6 +145,8 @@ async function buildSession(
   let hasError = false;
   let askingForInput = false;
   let pendingToolUse = false;
+  let awaitingAssistant = false;
+  let toolUseStartedAt: number | null = null;
   let mtime: Date | null = null;
   let lastActivity = registry?.updatedAt ? new Date(registry.updatedAt).toISOString() : new Date().toISOString();
   let taskSummary: ClaudeSession["taskSummary"] = null;
@@ -160,6 +169,8 @@ async function buildSession(
     hasError = lastMessageHasError(lines);
     askingForInput = isAskingForInput(lines);
     pendingToolUse = hasPendingToolUse(lines);
+    awaitingAssistant = isAwaitingAssistant(lines);
+    toolUseStartedAt = pendingToolUseStartedAt(lines);
     taskSummary = extractTaskSummary(headLines);
     if (mtime) lastActivity = mtime.toISOString();
   }
@@ -174,20 +185,39 @@ async function buildSession(
   // Registry status is written by the CLI itself (busy/idle/waiting) and is
   // authoritative. Hooks come next; the transcript heuristic is the fallback.
   // PermissionRequest hooks are ignored (they fire for auto-approved tools too).
+  // The registry only changes on status transitions, so transcript writes after
+  // a "busy" update are normal. An idle/waiting status older than the latest
+  // transcript write means this CLI stopped refreshing it.
+  const registryStale =
+    registry?.updatedAt != null &&
+    registry.status !== "busy" &&
+    registry.status !== "shell" &&
+    mtime !== null &&
+    mtime.getTime() - registry.updatedAt > REGISTRY_STALE_MS;
+  // A tool (Bash etc.) is executing in a child process started after the pending tool_use
+  // (progress lines keep the transcript fresh, so its mtime can't be the reference)
+  const runningTool = toolUseStartedAt !== null && hasToolChild(info.pid, processTree, Date.now() - toolUseStartedAt);
+  const recentlyAwaitingReply =
+    awaitingAssistant && mtime !== null && Date.now() - mtime.getTime() < AWAITING_REPLY_MAX_MS;
   const { status, source: statusSource } = resolveStatus({
     registryStatus: registry?.status ?? null,
+    registryStale,
     hookStatus: ctx.hook?.status ?? null,
     transcriptLinked: jsonlPath !== null,
     hasError,
+    // A prompt/tool result still awaiting Claude's reply, or a tool running in a
+    // child process, means the turn is in progress even while CPU is quiet.
     heuristic: () =>
-      classifyStatus({
-        pid: info.pid,
-        jsonlMtime: mtime,
-        cpuPercent: info.cpuPercent,
-        hasError,
-        isAskingForInput: askingForInput,
-        hasPendingToolUse: pendingToolUse,
-      }),
+      recentlyAwaitingReply || runningTool
+        ? "working"
+        : classifyStatus({
+            pid: info.pid,
+            jsonlMtime: mtime,
+            cpuPercent: info.cpuPercent,
+            hasError,
+            isAskingForInput: askingForInput,
+            hasPendingToolUse: pendingToolUse,
+          }),
   });
 
   const entrypoint = registry?.entrypoint ?? details?.env.entrypoint ?? null;
