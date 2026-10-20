@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { isClaudeProcess } from "@/lib/process-utils";
+import { closeSessionTab, findLiveSession } from "@/lib/session-actions";
 
 export async function POST(request: Request) {
   try {
-    const { pid } = (await request.json()) as { pid: number };
+    const { pid, closeTab } = (await request.json()) as { pid: number; closeTab?: boolean };
 
     if (!pid || typeof pid !== "number") {
       return NextResponse.json({ error: "Missing or invalid pid" }, { status: 400 });
@@ -11,6 +12,15 @@ export async function POST(request: Request) {
 
     if (!(await isClaudeProcess(pid))) {
       return NextResponse.json({ error: "PID is not a claude process" }, { status: 403 });
+    }
+
+    // Close the tab/pane hosting the session (never the whole app)
+    if (closeTab) {
+      const session = await findLiveSession(pid);
+      if (session) {
+        const result = await closeSessionTab(session);
+        return NextResponse.json({ ok: true, ...result });
+      }
     }
 
     try {

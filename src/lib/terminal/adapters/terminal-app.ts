@@ -33,6 +33,56 @@ function focusScript(ttyPath: string): string {
 end tell`;
 }
 
+/**
+ * Abort the script unless the front window's selected tab is the target —
+ * keystrokes go to whatever is frontmost, so never type into another window.
+ */
+function frontTabGuard(ttyPath: string): string {
+  const safeTty = escapeForAppleScript(ttyPath);
+  return `tell application "Terminal"
+  if tty of selected tab of front window is not "${safeTty}" then error "focus-mismatch"
+end tell
+`;
+}
+
+/**
+ * Close the Terminal tab whose tty matches. A single-tab window is closed by
+ * id through Terminal's dictionary. The dictionary can't close one tab of a
+ * multi-tab window, so that case selects the tab and uses cmd-W — but only
+ * after re-checking that the front window's selected tab is the target, so
+ * the keystroke can never land on another window.
+ */
+export function closeScript(ttyPath: string): string {
+  const safeTty = escapeForAppleScript(ttyPath);
+  return `set targetId to missing value
+set tabCount to 0
+tell application "Terminal"
+  repeat with aWindow in windows
+    repeat with aTab in tabs of aWindow
+      if tty of aTab is "${safeTty}" then
+        set targetId to id of aWindow
+        set tabCount to count of tabs of aWindow
+        set selected tab of aWindow to aTab
+      end if
+    end repeat
+  end repeat
+  if targetId is missing value then return "not-found"
+  if tabCount is 1 then
+    close window id targetId
+    return "closed-window"
+  end if
+  set index of window id targetId to 1
+  activate
+end tell
+delay ${APPLESCRIPT_FOCUS_DELAY_S}
+tell application "Terminal"
+  if id of front window is not targetId then return "focus-mismatch"
+  if tty of selected tab of front window is not "${safeTty}" then return "focus-mismatch"
+end tell
+tell application "System Events" to tell process "Terminal" to keystroke "w" using command down
+return "closed-tab"`;
+}
+
 export const terminalAppAdapter: TerminalAdapter = {
   async focus(info: TerminalInfo): Promise<void> {
     await execFileAsync("osascript", ["-e", focusScript(info.tty)], { timeout: OSASCRIPT_TIMEOUT_MS });
@@ -40,24 +90,27 @@ export const terminalAppAdapter: TerminalAdapter = {
 
   async sendText(info: TerminalInfo, text: string): Promise<void> {
     const asEscaped = escapeForAppleScript(text);
-    const action = systemEventsScript("Terminal", `keystroke "${asEscaped}"\n    keystroke return`);
+    const action =
+      frontTabGuard(info.tty) + systemEventsScript("Terminal", `keystroke "${asEscaped}"\n    keystroke return`);
     const script = withFocusDelay(focusScript(info.tty), action, APPLESCRIPT_FOCUS_DELAY_S);
     await execFileAsync("osascript", ["-e", script], { timeout: OSASCRIPT_TIMEOUT_MS });
   },
 
   async sendKeystroke(info: TerminalInfo, keystroke: string): Promise<void> {
     const asKeystroke = mapKeystrokeToSystemEvents(keystroke);
-    const action = systemEventsScript("Terminal", asKeystroke);
+    const action = frontTabGuard(info.tty) + systemEventsScript("Terminal", asKeystroke);
     const script = withFocusDelay(focusScript(info.tty), action, APPLESCRIPT_FOCUS_DELAY_S);
     await execFileAsync("osascript", ["-e", script], { timeout: OSASCRIPT_TIMEOUT_MS });
   },
 
   async closeSession(info: TerminalInfo): Promise<void> {
-    // Terminal.app's dictionary can't close individual tabs — select the tab
-    // first, then close it with cmd-W via System Events
-    const action = systemEventsScript("Terminal", `keystroke "w" using command down`);
-    const script = withFocusDelay(focusScript(info.tty), action, APPLESCRIPT_FOCUS_DELAY_S);
-    await execFileAsync("osascript", ["-e", script], { timeout: OSASCRIPT_TIMEOUT_MS });
+    const { stdout } = await execFileAsync("osascript", ["-e", closeScript(info.tty)], {
+      timeout: OSASCRIPT_TIMEOUT_MS,
+    });
+    const result = stdout.trim();
+    if (result !== "closed-window" && result !== "closed-tab") {
+      throw new Error(`Terminal tab not closed (${result || "no result"})`);
+    }
   },
 
   async createSession(command: string, opts: CreateSessionOpts): Promise<void> {

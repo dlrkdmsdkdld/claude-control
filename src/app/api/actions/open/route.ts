@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 import { promisify } from "util";
 import { CHROMIUM_BROWSERS } from "@/lib/close-tabs";
 import { BROWSER_OPTIONS, EDITOR_OPTIONS, GIT_GUI_OPTIONS, loadConfig } from "@/lib/config";
-import { discoverSessions } from "@/lib/discovery";
 import { LaunchError, openInEditor } from "@/lib/editor-launcher";
+import { findLiveSession, focusEditorWindow, revealConversation, SESSION_UUID_RE } from "@/lib/session-actions";
 import {
   buildProcessTree,
   detectAllTmuxPanes,
@@ -15,8 +15,6 @@ import {
   sendText,
 } from "@/lib/terminal";
 import { escapeForAppleScript } from "@/lib/terminal/adapters/shared";
-import type { ClaudeSession } from "@/lib/types";
-import { conversationUri } from "@/lib/vscode";
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
@@ -32,29 +30,8 @@ type ActionType =
   | "open-url"
   | "open-conversation";
 
-const VSCODE_DEF = EDITOR_OPTIONS.find((e) => e.id === "vscode")!;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function failure(error: string, hint: string, status = 422, attempts: string[] = []) {
   return NextResponse.json({ error, hint, attempts }, { status });
-}
-
-/** Look the session up server-side so host/app paths never come from the client. */
-async function findLiveSession(pid: number): Promise<ClaudeSession | null> {
-  const sessions = await discoverSessions();
-  return sessions.find((s) => s.pid === pid) ?? null;
-}
-
-/** Bring the VS Code window that hosts the session to the front (reusing it). */
-async function focusEditorWindow(session: ClaudeSession) {
-  const folder = session.editorWorkspace ?? session.workingDirectory;
-  const config = await loadConfig();
-  const tree = await buildProcessTree();
-  return openInEditor(VSCODE_DEF, folder, {
-    overridePath: config.editorAppPaths?.vscode,
-    processTree: tree,
-    preferBundle: session.host.bundlePath,
-  });
 }
 
 /**
@@ -195,7 +172,11 @@ export async function POST(request: Request) {
         if (!pid) return NextResponse.json({ error: "Missing pid" }, { status: 400 });
         const session = await findLiveSession(pid);
         if (!session) return failure("세션 프로세스를 찾을 수 없습니다.", "세션이 이미 종료됐을 수 있습니다.", 404);
-        if (session.host.kind !== "vscode-extension" || !session.canOpenConversation || !UUID_RE.test(session.id)) {
+        if (
+          session.host.kind !== "vscode-extension" ||
+          !session.canOpenConversation ||
+          !SESSION_UUID_RE.test(session.id)
+        ) {
           return failure(
             "이 세션은 VS Code 대화 탭 열기를 지원하지 않습니다.",
             "VS Code 확장 세션이 아니거나, 설치된 Claude Code 확장이 대화 열기 URI를 지원하지 않습니다. 'VS Code 창으로 이동'을 사용하세요.",
@@ -203,11 +184,7 @@ export async function POST(request: Request) {
         }
         // Focus the hosting window first: the extension handles the URI in the
         // active window, revealing the tab if that window holds the conversation.
-        const opened = await focusEditorWindow(session);
-        launchMethod = opened.method;
-        await new Promise((r) => setTimeout(r, 700));
-        const uri = conversationUri(session.host.uriScheme ?? "vscode", session.id);
-        await execFileAsync("open", opened.bundlePath ? ["-a", opened.bundlePath, uri] : [uri], { timeout: 10000 });
+        launchMethod = (await revealConversation(session)).method;
         break;
       }
       case "finder":

@@ -63,7 +63,7 @@ export function QuickActions({
   canOpenConversation?: boolean;
   editorWorkspace?: string | null;
 }) {
-  const [actionError, setActionError] = useState<{ error: string; hint?: string } | null>(null);
+  const [actionError, setActionError] = useState<{ error: string; hint?: string; tone?: "info" } | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -78,7 +78,7 @@ export function QuickActions({
     return () => document.removeEventListener("mousedown", close);
   }, [menuOpen]);
 
-  const showError = (err: { error: string; hint?: string }) => {
+  const showError = (err: { error: string; hint?: string; tone?: "info" }) => {
     setActionError(err);
     if (errorTimer.current) clearTimeout(errorTimer.current);
     errorTimer.current = setTimeout(() => setActionError(null), 10000);
@@ -120,11 +120,15 @@ export function QuickActions({
     setKillArmed(false);
     setKilling(true);
     try {
-      await fetch("/api/sessions/kill", {
+      // Live sessions: close the hosting tab/pane; orphaned ones have no tab, so just end the process
+      const res = await fetch("/api/sessions/kill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pid }),
+        body: JSON.stringify({ pid, closeTab: !orphaned }),
       });
+      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!res.ok) showError({ error: data.error ?? `종료 실패 (${res.status})` });
+      else if (data.message) showError({ error: data.message, tone: "info" });
     } catch (err) {
       console.error("Kill failed:", err);
     }
@@ -222,10 +226,12 @@ export function QuickActions({
         killing
           ? "종료하는 중..."
           : killArmed
-            ? "한 번 더 클릭하면 이 claude 프로세스를 종료합니다"
+            ? orphaned
+              ? "한 번 더 클릭하면 이 claude 프로세스를 종료합니다"
+              : "한 번 더 클릭하면 이 세션의 탭을 닫습니다"
             : orphaned
               ? "세션 종료 — 연결이 끊긴 claude 프로세스를 종료 (화면 전환 아님)"
-              : "세션 종료 — 이 claude 프로세스를 종료 (화면 전환 아님)"
+              : "세션 종료 — 이 세션이 실행 중인 탭/창만 닫음 (앱 전체는 유지)"
       }
       className={`flex-1 flex items-center justify-center h-8 rounded-lg ${
         killing || killArmed
@@ -439,9 +445,11 @@ export function QuickActions({
             e.stopPropagation();
             setActionError(null);
           }}
-          className="mt-2 rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2 text-[11px] leading-relaxed cursor-pointer"
+          className={`mt-2 rounded-lg border px-3 py-2 text-[11px] leading-relaxed cursor-pointer ${
+            actionError.tone === "info" ? "border-white/10 bg-white/4" : "border-red-500/20 bg-red-500/8"
+          }`}
         >
-          <p className="text-red-300">{actionError.error}</p>
+          <p className={actionError.tone === "info" ? "text-zinc-300" : "text-red-300"}>{actionError.error}</p>
           {actionError.hint && <p className="text-zinc-400 mt-0.5">{actionError.hint}</p>}
         </div>
       )}

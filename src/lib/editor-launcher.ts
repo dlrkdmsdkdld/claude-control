@@ -58,6 +58,20 @@ async function matchesBundle(bundlePath: string, def: EditorOption): Promise<boo
   return id !== null && def.bundleIds.includes(id);
 }
 
+/** CFBundleExecutable of an .app bundle (the process name System Events knows it by). */
+export async function readBundleExecutable(bundlePath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      "plutil",
+      ["-extract", "CFBundleExecutable", "raw", "-o", "-", join(bundlePath, "Contents", "Info.plist")],
+      { timeout: 3000 },
+    );
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Folders checked for `<App Name>.app` besides Spotlight — Desktop/Downloads installs are common. */
 export function standardAppLocations(appName: string): string[] {
   const home = homedir();

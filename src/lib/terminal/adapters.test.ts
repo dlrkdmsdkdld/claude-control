@@ -521,8 +521,8 @@ describe("closeSession", () => {
     expect(script).toContain("close aSession");
   });
 
-  it("closes the Terminal.app tab via focus + cmd-W", async () => {
-    const execMock = mockExec();
+  it("closes the Terminal.app tab by window id, or cmd-W only after verifying the front tab", async () => {
+    const execMock = mockExec((bin) => (bin === "osascript" ? "closed-tab" : null));
     const { closeSession } = await import("./adapters");
 
     await closeSession({ ...baseInfo, app: "terminal-app", appName: "Terminal", processName: "Terminal" });
@@ -532,7 +532,22 @@ describe("closeSession", () => {
     const script = (call![1] as string[])[1];
     expect(script).toContain('tell application "Terminal"');
     expect(script).toContain("/dev/ttys007");
-    expect(script).toContain('keystroke "w" using command down');
+    expect(script).toContain("close window id targetId");
+    // The guard must come before the keystroke
+    const guard = script.indexOf(
+      'if tty of selected tab of front window is not "/dev/ttys007" then return "focus-mismatch"',
+    );
+    expect(guard).toBeGreaterThan(-1);
+    expect(guard).toBeLessThan(script.indexOf('keystroke "w" using command down'));
+  });
+
+  it("reports failure instead of pressing cmd-W on another Terminal window", async () => {
+    mockExec((bin) => (bin === "osascript" ? "focus-mismatch" : null));
+    const { closeSession } = await import("./adapters");
+
+    await expect(
+      closeSession({ ...baseInfo, app: "terminal-app", appName: "Terminal", processName: "Terminal" }),
+    ).rejects.toThrow(/not closed/);
   });
 
   it("closes the kitty window matching the pid", async () => {
