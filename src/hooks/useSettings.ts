@@ -1,7 +1,9 @@
 import useSWR from "swr";
+import { QUICK_OPEN_EDITOR_IDS } from "@/lib/types";
 
 interface AppOption {
   id: string;
+  label?: string;
   installed: boolean;
 }
 
@@ -44,5 +46,12 @@ export function useSettings() {
     cleanupCloseTabs: data?.config?.cleanupCloseTabs ?? false,
     editorAvailable: isAppAvailable(data?.options?.editors, data?.config?.editor),
     gitGuiAvailable: isAppAvailable(data?.options?.gitGuis, data?.config?.gitGui),
+    editorId: data?.config?.editor ?? null,
+    editorLabel: data?.options?.editors?.find((o) => o.id === data?.config?.editor)?.label ?? "Editor",
+    gitGuiLabel: data?.options?.gitGuis?.find((o) => o.id === data?.config?.gitGui)?.label ?? "Git GUI",
+    /** Installed editors offered as explicit "Open in …" choices */
+    quickOpenEditors: (data?.options?.editors ?? []).filter(
+      (o) => QUICK_OPEN_EDITOR_IDS.includes(o.id) && o.installed,
+    ) as { id: string; label: string; installed: boolean }[],
   };
 }

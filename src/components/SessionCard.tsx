@@ -48,7 +48,46 @@ const cardStyles: Record<SessionStatus, { border: string; glow: string; accent: 
     glow: "glow-zinc",
     accent: "from-zinc-500/3 to-transparent",
   },
+  unknown: {
+    border: "border-zinc-600/30 border-dashed hover:border-zinc-500/50",
+    glow: "",
+    accent: "from-zinc-500/3 to-transparent",
+  },
 };
+
+const HOST_LABELS: Record<ClaudeSession["host"]["kind"], string> = {
+  "vscode-extension": "VS Code 확장",
+  "vscode-terminal": "VS Code 터미널",
+  terminal: "터미널",
+  tmux: "tmux",
+  app: "앱 터미널",
+  unknown: "실행 환경 확인 불가",
+};
+
+/** Where the session runs, which account dir it belongs to, and how its transcript was linked. */
+function SessionOrigin({ session }: { session: ClaudeSession }) {
+  const host =
+    session.host.kind === "terminal" || session.host.kind === "app"
+      ? `${HOST_LABELS[session.host.kind]} · ${session.host.appName ?? ""}`
+      : HOST_LABELS[session.host.kind];
+  return (
+    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-zinc-500 min-w-0">
+      <span className="shrink-0 px-1.5 py-px rounded-sm bg-white/4 border border-white/6">{host}</span>
+      {session.configDir && <span className="truncate font-(family-name:--font-geist-mono)">{session.configDir}</span>}
+      {session.linkSource === "inferred" && (
+        <span
+          className="shrink-0 has-tooltip text-amber-400/80"
+          data-tip="세션 ID 근거가 없어 프로젝트의 유일한 미연결 세션으로 추정 연결했습니다"
+        >
+          추정 연결
+        </span>
+      )}
+      {session.pid !== null && session.linkSource === null && !session.jsonlPath && (
+        <span className="shrink-0 text-orange-300/80">기록 연결 안 됨</span>
+      )}
+    </div>
+  );
+}
 
 export function SessionCard({
   session,
@@ -84,7 +123,8 @@ export function SessionCard({
   onCancelEdit?: () => void;
 }) {
   const isSuppressed = !!actedOn;
-  const showQuickReply = session.status === "waiting" && session.pid && !isSuppressed;
+  const showQuickReply = session.status === "waiting" && session.pid && !isSuppressed && session.acceptsInput;
+  const waitingInApp = session.status === "waiting" && !session.acceptsInput;
   const displayStatus = isSuppressed ? (actedOn!.action === "reject" ? "idle" : "working") : session.status;
   const styles = cardStyles[displayStatus];
   const [cleanupState, setCleanupState] = useState<"idle" | "confirm" | "cleaning" | "done">("idle");
@@ -210,6 +250,7 @@ export function SessionCard({
               <p className="text-[11px] text-zinc-600 truncate font-(family-name:--font-geist-mono) mt-0.5">
                 {session.workingDirectory.replace(/.*\/([^/]+\/[^/]+)$/, "$1")}
               </p>
+              <SessionOrigin session={session} />
             </div>
             <StatusBadge status={displayStatus} orphaned={session.orphaned} stale={isStale} />
           </div>
@@ -245,9 +286,19 @@ export function SessionCard({
             ) : session.taskSummary ? (
               <TaskSummaryView task={session.taskSummary} onStartEdit={onStartEdit} />
             ) : (
-              <OutputPreview preview={session.preview} status={session.status} />
+              <OutputPreview
+                preview={session.preview}
+                status={session.status}
+                transcriptLinked={session.jsonlPath !== null || session.linkSource !== null}
+              />
             )}
           </div>
+
+          {waitingInApp && (
+            <p className="text-[11px] text-blue-300/80 mb-1">
+              {session.host.appName ?? "실행 중인 앱"}에서 입력·승인을 기다리고 있습니다.
+            </p>
+          )}
 
           {/* Quick reply for waiting sessions */}
           {showQuickReply && (
@@ -305,6 +356,10 @@ export function SessionCard({
               orphaned={session.orphaned}
               tmuxSession={session.tmuxSession}
               onCleanup={canCleanup ? handleCleanup : undefined}
+              host={session.host}
+              acceptsInput={session.acceptsInput}
+              canOpenConversation={session.canOpenConversation}
+              editorWorkspace={session.editorWorkspace}
             />
           )}
         </div>

@@ -1,10 +1,20 @@
 import { readdir, stat } from "fs/promises";
 import { join } from "path";
+import { configDirLabel, findTranscriptForSession, listClaudeConfigDirs, projectDirFor } from "./claude-config";
 import { ORPHAN_CHECK_INTERVAL_MS } from "./constants";
 import { getGitDiff, getGitSummary, getMainWorktreePath, getPrUrl } from "./git-info";
 import { type HookStatus, readAllHookStatuses } from "./hooks-reader";
-import { repoNameFromPath, workingDirToProjectDir } from "./paths";
-import { getAllProcessInfos, ProcessInfo } from "./process-utils";
+import { repoNameFromPath } from "./paths";
+import {
+  getAllProcessInfos,
+  getProcessDetails,
+  isAuxiliaryClaudeArgs,
+  ProcessDetails,
+  ProcessInfo,
+  sessionIdFromArgs,
+} from "./process-utils";
+import { detectSessionHost, hostAcceptsTerminalInput } from "./session-host";
+import { chooseSessionId, pickInferredTranscript, resolveStatus, TranscriptCandidate } from "./session-link";
 import { loadSessionMeta } from "./session-meta";
 import {
   extractBranch,
@@ -21,6 +31,7 @@ import {
   readJsonlHead,
   readJsonlTail,
 } from "./session-reader";
+import { isAuxiliaryKind, type RegistryEntry, readSessionRegistries, selectRegistryEntry } from "./session-registry";
 import { classifyStatus } from "./status-classifier";
 import {
   buildProcessTree,
@@ -31,30 +42,34 @@ import {
   getTtysForPids,
   isOrphaned,
 } from "./terminal/detect";
-import { ClaudeSession, ConversationPreview, SessionDetail } from "./types";
+import type { ProcessTreeEntry } from "./terminal/types";
+import {
+  extensionDirFromBinary,
+  extensionSupportsOpenSession,
+  readOpenFolders,
+  resolveWorkspaceForCwd,
+} from "./vscode";
+import { ClaudeSession, ConversationPreview, SessionDetail, TranscriptLinkSource } from "./types";
 
-async function findLatestJsonl(projectDir: string, excludePaths?: Set<string>): Promise<string | null> {
+async function listTranscripts(projectDir: string): Promise<TranscriptCandidate[]> {
   try {
     const entries = await readdir(projectDir);
-    const jsonlFiles = entries.filter((e) => e.endsWith(".jsonl"));
-    if (jsonlFiles.length === 0) return null;
-
-    let latest: { path: string; mtime: number } | null = null;
-    for (const f of jsonlFiles) {
-      const fullPath = join(projectDir, f);
-      if (excludePaths?.has(fullPath)) continue;
-      try {
-        const s = await stat(fullPath);
-        if (!latest || s.mtimeMs > latest.mtime) {
-          latest = { path: fullPath, mtime: s.mtimeMs };
-        }
-      } catch {
-        // skip
-      }
-    }
-    return latest?.path ?? null;
+    const out: TranscriptCandidate[] = [];
+    await Promise.all(
+      entries
+        .filter((e) => e.endsWith(".jsonl"))
+        .map(async (f) => {
+          const fullPath = join(projectDir, f);
+          try {
+            out.push({ path: fullPath, mtimeMs: (await stat(fullPath)).mtimeMs });
+          } catch {
+            // skip
+          }
+        }),
+    );
+    return out;
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -62,20 +77,55 @@ async function findLatestJsonl(projectDir: string, excludePaths?: Set<string>): 
 let lastOrphanCheck = 0;
 let orphanedPids = new Set<number>();
 let pidTmuxSession = new Map<number, string>();
+let pidHasTty = new Map<number, boolean>();
+
+/** Sessions whose process exited recently — kept briefly so the card shows "Finished". */
+const FINISHED_RETENTION_MS = 2 * 60 * 1000;
+let previousSessions = new Map<number, ClaudeSession>();
+const recentlyFinished = new Map<string, { session: ClaudeSession; endedAt: number }>();
+
+interface LinkResult {
+  sessionId: string | null;
+  jsonlPath: string | null;
+  source: TranscriptLinkSource | null;
+}
+
+interface SessionContext {
+  info: ProcessInfo & { workingDirectory: string };
+  details: ProcessDetails | undefined;
+  registry: RegistryEntry | null;
+  hook: HookStatus | undefined;
+  configDirs: string[];
+}
+
+/** Link a process to its conversation using only verifiable evidence. */
+async function linkTranscript(ctx: SessionContext): Promise<LinkResult> {
+  const chosen = chooseSessionId({
+    registry: ctx.registry,
+    hook: ctx.hook,
+    argsSessionId: ctx.details ? sessionIdFromArgs(ctx.details.args) : null,
+  });
+  if (!chosen) return { sessionId: null, jsonlPath: null, source: null };
+
+  if (chosen.source === "hook" && ctx.hook?.transcriptPath) {
+    return { sessionId: chosen.sessionId, jsonlPath: ctx.hook.transcriptPath, source: "hook" };
+  }
+  const jsonlPath = await findTranscriptForSession(ctx.configDirs, ctx.info.workingDirectory, chosen.sessionId);
+  // A known session ID without a transcript is a fresh conversation with no messages yet
+  return { sessionId: chosen.sessionId, jsonlPath, source: chosen.source };
+}
 
 async function buildSession(
-  info: ProcessInfo,
-  hookStatus: HookStatus | undefined,
-  claimedPaths: Set<string>,
+  ctx: SessionContext,
+  link: LinkResult,
+  processTree: Map<number, ProcessTreeEntry>,
   orphaned: boolean,
   tmuxSession: string | null,
-): Promise<ClaudeSession | null> {
-  if (!info.workingDirectory) return null;
+): Promise<ClaudeSession> {
+  const { info, registry, details } = ctx;
+  const jsonlPath = link.jsonlPath;
 
-  const projectDir = workingDirToProjectDir(info.workingDirectory);
-  const jsonlPath = hookStatus?.transcriptPath ?? (await findLatestJsonl(projectDir, claimedPaths));
-
-  let sessionId = `pid-${info.pid}`;
+  let sessionId = link.sessionId ?? `pid-${info.pid}`;
   let startedAt: string | null = null;
   let branch: string | null = null;
   let preview: ConversationPreview = {
@@ -89,7 +139,7 @@ async function buildSession(
   let askingForInput = false;
   let pendingToolUse = false;
   let mtime: Date | null = null;
-  let lastActivity = new Date().toISOString();
+  let lastActivity = registry?.updatedAt ? new Date(registry.updatedAt).toISOString() : new Date().toISOString();
   let taskSummary: ClaudeSession["taskSummary"] = null;
 
   const [jsonlResult, git, mainWorktreePath] = await Promise.all([
@@ -103,7 +153,7 @@ async function buildSession(
   if (jsonlResult) {
     const [lines, headLines, jsonlMtime] = jsonlResult;
     mtime = jsonlMtime;
-    sessionId = hookStatus?.sessionId ?? extractSessionId(lines) ?? sessionId;
+    if (!link.sessionId) sessionId = extractSessionId(lines) ?? sessionId;
     startedAt = extractStartedAt(lines);
     branch = extractBranch(lines);
     preview = extractPreview(lines);
@@ -121,22 +171,41 @@ async function buildSession(
   const isWorktree = mainWorktreePath !== null && mainWorktreePath !== info.workingDirectory;
   const parentRepo = isWorktree ? mainWorktreePath : null;
 
-  // Hooks provide authoritative working/idle/finished status.
-  // "Waiting" is detected by the heuristic classifier via JSONL (hasPendingToolUse +
-  // APPROVAL_SETTLE_MS), because PermissionRequest hooks fire for auto-approved tools too.
-  // If the hook status is available (and not null, meaning PermissionRequest was ignored),
-  // use it; otherwise fall back to the heuristic classifier.
-  const hookDerivedStatus = hookStatus?.status ?? null;
-  const status: ClaudeSession["status"] =
-    hookDerivedStatus ??
-    classifyStatus({
-      pid: info.pid,
-      jsonlMtime: mtime,
-      cpuPercent: info.cpuPercent,
-      hasError,
-      isAskingForInput: askingForInput,
-      hasPendingToolUse: pendingToolUse,
-    });
+  // Registry status is written by the CLI itself (busy/idle/waiting) and is
+  // authoritative. Hooks come next; the transcript heuristic is the fallback.
+  // PermissionRequest hooks are ignored (they fire for auto-approved tools too).
+  const { status, source: statusSource } = resolveStatus({
+    registryStatus: registry?.status ?? null,
+    hookStatus: ctx.hook?.status ?? null,
+    transcriptLinked: jsonlPath !== null,
+    hasError,
+    heuristic: () =>
+      classifyStatus({
+        pid: info.pid,
+        jsonlMtime: mtime,
+        cpuPercent: info.cpuPercent,
+        hasError,
+        isAskingForInput: askingForInput,
+        hasPendingToolUse: pendingToolUse,
+      }),
+  });
+
+  const entrypoint = registry?.entrypoint ?? details?.env.entrypoint ?? null;
+  const host = detectSessionHost(info.pid, processTree, {
+    entrypoint,
+    hasTty: pidHasTty.get(info.pid) ?? false,
+    tmuxSession,
+  });
+
+  let editorWorkspace: string | null = null;
+  let canOpenConversation = false;
+  if (host.kind === "vscode-extension" || host.kind === "vscode-terminal") {
+    editorWorkspace = resolveWorkspaceForCwd(info.workingDirectory, await readOpenFolders(host.appName));
+  }
+  if (host.kind === "vscode-extension" && link.sessionId) {
+    const comm = processTree.get(info.pid)?.comm ?? "";
+    canOpenConversation = await extensionSupportsOpenSession(extensionDirFromBinary(comm));
+  }
 
   // Recent user activity overrides orphan detection — if the session had
   // input within the last 60s it's clearly not abandoned.
@@ -161,6 +230,14 @@ async function buildSession(
     prUrl,
     orphaned: recentActivity ? false : orphaned,
     tmuxSession,
+    host,
+    entrypoint,
+    configDir: registry?.configDir ? configDirLabel(registry.configDir) : null,
+    linkSource: jsonlPath || link.sessionId ? link.source : null,
+    statusSource,
+    editorWorkspace,
+    canOpenConversation,
+    acceptsInput: hostAcceptsTerminalInput(host),
   };
 }
 
@@ -172,7 +249,25 @@ export async function discoverSessions(): Promise<ClaudeSession[]> {
     readAllHookStatuses(),
     loadSessionMeta(),
   ]);
-  const pids = findClaudePidsFromTree(processTree);
+  const allPids = findClaudePidsFromTree(processTree);
+  const details = await getProcessDetails(allPids);
+
+  // Config dirs: ~/.claude, ~/.claude-*, plus CLAUDE_CONFIG_DIR of live processes
+  const envConfigDirs = new Set<string>();
+  for (const d of details.values()) if (d.env.configDir) envConfigDirs.add(d.env.configDir);
+  const configDirs = await listClaudeConfigDirs(envConfigDirs);
+  const registries = await readSessionRegistries(configDirs, new Set(allPids));
+
+  // Drop helper processes (Chrome native host, MCP server, daemons) — they are not conversations
+  const registryByPid = new Map<number, RegistryEntry | null>();
+  const pids = allPids.filter((pid) => {
+    const d = details.get(pid);
+    const reg = selectRegistryEntry(registries.get(pid), d?.startUtc ?? null);
+    registryByPid.set(pid, reg);
+    if (d && isAuxiliaryClaudeArgs(d.args)) return false;
+    if (reg && isAuxiliaryKind(reg.kind)) return false;
+    return true;
+  });
   const processInfos = await getAllProcessInfos(pids, processTree);
 
   // Clean up terminal cache entries for dead PIDs
@@ -181,7 +276,8 @@ export async function discoverSessions(): Promise<ClaudeSession[]> {
 
   // Orphan check on slower interval — batched to minimize subprocess calls
   const now = Date.now();
-  if (now - lastOrphanCheck >= ORPHAN_CHECK_INTERVAL_MS) {
+  const unchecked = pids.some((pid) => !pidHasTty.has(pid));
+  if (now - lastOrphanCheck >= ORPHAN_CHECK_INTERVAL_MS || unchecked) {
     lastOrphanCheck = now;
     const [ttyMap, tmuxPanes, tmuxClients] = await Promise.all([
       getTtysForPids(pids),
@@ -192,8 +288,10 @@ export async function discoverSessions(): Promise<ClaudeSession[]> {
     const attachedTmuxSessions = new Set(tmuxClients.map((c) => c.sessionName));
     const newOrphaned = new Set<number>();
     const newPidTmuxSession = new Map<number, string>();
+    const newPidHasTty = new Map<number, boolean>();
     for (const pid of pids) {
       const tty = ttyMap.get(pid);
+      newPidHasTty.set(pid, tty !== undefined);
       const paneInfo = tty ? tmuxPanes.get(tty) : undefined;
       const inTmux = paneInfo !== undefined;
       const tmuxSessionHasClient = paneInfo ? attachedTmuxSessions.has(paneInfo.sessionName) : false;
@@ -206,31 +304,95 @@ export async function discoverSessions(): Promise<ClaudeSession[]> {
     }
     orphanedPids = newOrphaned;
     pidTmuxSession = newPidTmuxSession;
+    pidHasTty = newPidHasTty;
   }
 
-  // Collect transcript paths claimed by hook events so fallback doesn't reuse them
-  const claimedPaths = new Set<string>();
-  for (const [pid, hook] of hookStatuses) {
-    if (hook.transcriptPath && activePids.has(pid)) {
-      claimedPaths.add(hook.transcriptPath);
+  const contexts: SessionContext[] = processInfos
+    .map((info) => {
+      // The CLI's registry records cwd as proper UTF-8; prefer it over lsof's output
+      const registry = registryByPid.get(info.pid) ?? null;
+      return registry?.cwd ? { ...info, workingDirectory: registry.cwd } : info;
+    })
+    .filter((info): info is ProcessInfo & { workingDirectory: string } => info.workingDirectory !== null)
+    .map((info) => {
+      const registry = registryByPid.get(info.pid) ?? null;
+      const envDir = details.get(info.pid)?.env.configDir ?? null;
+      // Search the session's own config dir first; others only as a fallback
+      const own = registry?.configDir ?? (envDir && configDirs.includes(envDir) ? envDir : null);
+      const ordered = own ? [own, ...configDirs.filter((d) => d !== own)] : configDirs;
+      // Hook files are keyed by the hook's parent PID; only trust ones for this live process
+      const hook = hookStatuses.get(info.pid);
+      return { info, details: details.get(info.pid), registry, hook, configDirs: ordered };
+    });
+
+  const links = await Promise.all(contexts.map((ctx) => linkTranscript(ctx)));
+
+  // Inferred fallback for processes with no session ID evidence (old CLIs, no hooks):
+  // only when it is the single unlinked process in its project.
+  const claimed = new Set(links.map((l) => l.jsonlPath).filter((p): p is string => p !== null));
+  const unlinkedByCwd = new Map<string, number>();
+  contexts.forEach((ctx, i) => {
+    if (!links[i].sessionId) {
+      const cwd = ctx.info.workingDirectory;
+      unlinkedByCwd.set(cwd, (unlinkedByCwd.get(cwd) ?? 0) + 1);
     }
-  }
-
-  const results = await Promise.all(
-    processInfos
-      .filter((info) => info.workingDirectory !== null)
-      .map((info) =>
-        buildSession(
-          info,
-          hookStatuses.get(info.pid),
-          claimedPaths,
-          orphanedPids.has(info.pid),
-          pidTmuxSession.get(info.pid) ?? null,
-        ),
-      ),
+  });
+  await Promise.all(
+    contexts.map(async (ctx, i) => {
+      if (links[i].sessionId) return;
+      const cwd = ctx.info.workingDirectory;
+      const dirs = ctx.details?.env.configDir ? [ctx.details.env.configDir] : ctx.configDirs;
+      const candidates = (await Promise.all(dirs.map((d) => listTranscripts(projectDirFor(d, cwd))))).flat();
+      const startMs = ctx.details?.startUtc ? Date.parse(`${ctx.details.startUtc} UTC`) : NaN;
+      const picked = pickInferredTranscript(
+        candidates,
+        claimed,
+        isNaN(startMs) ? null : startMs - 5000,
+        unlinkedByCwd.get(cwd) ?? 0,
+      );
+      if (picked) {
+        claimed.add(picked);
+        links[i] = { sessionId: null, jsonlPath: picked, source: "inferred" };
+      }
+    }),
   );
 
-  const sessions = results.filter((s): s is ClaudeSession => s !== null);
+  const sessions = await Promise.all(
+    contexts.map((ctx, i) =>
+      buildSession(
+        ctx,
+        links[i],
+        processTree,
+        orphanedPids.has(ctx.info.pid),
+        pidTmuxSession.get(ctx.info.pid) ?? null,
+      ),
+    ),
+  );
+
+  // Processes that exited since the last poll: show them as finished for a short while
+  const alive = new Set(sessions.map((s) => s.pid));
+  // An empty tree means `ps` failed — don't mistake that for every process exiting
+  for (const [pid, prev] of processTree.size > 0 ? previousSessions : []) {
+    if (!alive.has(pid) && !processTree.has(pid)) {
+      recentlyFinished.set(prev.id, {
+        session: {
+          ...prev,
+          pid: null,
+          status: "finished",
+          statusSource: "process-exit",
+          orphaned: false,
+          acceptsInput: false,
+        },
+        endedAt: now,
+      });
+    }
+  }
+  previousSessions = new Map(sessions.map((s) => [s.pid as number, s]));
+  const liveIds = new Set(sessions.map((s) => s.id));
+  for (const [id, entry] of recentlyFinished) {
+    if (now - entry.endedAt > FINISHED_RETENTION_MS || liveIds.has(id)) recentlyFinished.delete(id);
+    else sessions.push(entry.session);
+  }
 
   // Merge user-provided title/description overrides
   for (const session of sessions) {

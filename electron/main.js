@@ -6,7 +6,9 @@ const net = require("net");
 const http = require("http");
 const os = require("os");
 
-const PORT = 3200;
+// A side-by-side build sets "claudeControlPort" via electron-builder extraMetadata
+// so it can run next to an installed copy (which owns port 3200).
+const PORT = Number(process.env.CLAUDE_CONTROL_PORT) || require("../package.json").claudeControlPort || 3200;
 let nextProcess = null;
 
 // Electron apps launched from Finder/dock get a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin).
@@ -211,6 +213,19 @@ ipcMain.handle("dialog:pickFolder", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
     title: "Select your code directory",
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return { cancelled: true };
+  }
+  return { path: result.filePaths[0] };
+});
+
+ipcMain.handle("dialog:pickApp", async (_event, title) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ["openFile"],
+    filters: [{ name: "Applications", extensions: ["app"] }],
+    defaultPath: "/Applications",
+    title: typeof title === "string" ? title : "Select application",
   });
   if (result.canceled || result.filePaths.length === 0) {
     return { cancelled: true };

@@ -230,7 +230,7 @@ export function SessionGrid({
         onSelect={() => onSelectIndex?.(isSelected ? null : idx)}
         displayStatus={displayStatus}
         onApproveReject={
-          session.pid
+          session.pid && session.acceptsInput
             ? (action) => {
                 sendKeystrokeForRow(session.pid!, action === "approve" ? "return" : "escape", session.id, action);
               }

@@ -1,6 +1,21 @@
 import { ConversationPreview, SessionStatus } from "@/lib/types";
 
-export function OutputPreview({ preview, status }: { preview: ConversationPreview; status?: SessionStatus }) {
+export function OutputPreview({
+  preview,
+  status,
+  transcriptLinked = true,
+}: {
+  preview: ConversationPreview;
+  status?: SessionStatus;
+  transcriptLinked?: boolean;
+}) {
+  if (!transcriptLinked) {
+    return (
+      <div className="text-xs text-zinc-500 italic py-2">
+        기록 연결 안 됨 — 이 프로세스의 대화 기록을 확인할 근거(세션 ID)를 찾지 못했습니다
+      </div>
+    );
+  }
   if (preview.messageCount === 0) {
     return (
       <div className="flex items-center gap-2 text-xs text-zinc-600 italic py-2">

@@ -25,6 +25,8 @@ export interface AppConfig {
   showKeyboardHints: boolean;
   staleThresholdMinutes: number;
   cleanupCloseTabs: boolean;
+  /** Editor id → .app path chosen by the user (overrides auto-detection) */
+  editorAppPaths: Record<string, string>;
 }
 
 export const DEFAULT_INITIAL_PROMPT =
@@ -33,14 +35,76 @@ export const DEFAULT_INITIAL_PROMPT =
 export const DEFAULT_CREATE_PR_PROMPT =
   "Please commit all your changes with a descriptive commit message, push the branch to origin, and create a pull request. Include a clear title and description of what changed and why.";
 
-export const EDITOR_OPTIONS = [
+export interface EditorOption {
+  id: string;
+  label: string;
+  /** CLI on PATH — only a fallback; editors are opened via their .app bundle */
+  command: string;
+  appName: string;
+  /** Main executable name inside Contents/MacOS (used to find a running copy) */
+  processName: string;
+  /** Accepted CFBundleIdentifier values — verified before launching a bundle */
+  bundleIds?: string[];
+  /**
+   * JetBrains-style IDEs open a duplicate project frame when asked to open a
+   * project that is already open. Prefix of their config dir under
+   * ~/Library/Application Support, used to read recentProjects.xml.
+   */
+  jetbrainsConfigPrefix?: string;
+}
+
+export const EDITOR_OPTIONS: EditorOption[] = [
   { id: "none", label: "None", command: "", appName: "", processName: "" },
-  { id: "vscode", label: "VS Code", command: "code", appName: "Visual Studio Code", processName: "Code" },
-  { id: "cursor", label: "Cursor", command: "cursor", appName: "Cursor", processName: "Cursor" },
-  { id: "zed", label: "Zed", command: "zed", appName: "Zed", processName: "Zed" },
-  { id: "sublime", label: "Sublime Text", command: "subl", appName: "Sublime Text", processName: "Sublime Text" },
-  { id: "webstorm", label: "WebStorm", command: "webstorm", appName: "WebStorm", processName: "WebStorm" },
-  { id: "intellij", label: "IntelliJ IDEA", command: "idea", appName: "IntelliJ IDEA", processName: "IntelliJ IDEA" },
+  {
+    id: "vscode",
+    label: "VS Code",
+    command: "code",
+    appName: "Visual Studio Code",
+    processName: "Code",
+    bundleIds: ["com.microsoft.VSCode"],
+  },
+  {
+    id: "android-studio",
+    label: "Android Studio",
+    command: "studio",
+    appName: "Android Studio",
+    processName: "studio",
+    bundleIds: ["com.google.android.studio", "com.google.android.studio-EAP"],
+    jetbrainsConfigPrefix: "Google/AndroidStudio",
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    command: "cursor",
+    appName: "Cursor",
+    processName: "Cursor",
+    bundleIds: ["com.todesktop.230313mzl4w4u92"],
+  },
+  { id: "zed", label: "Zed", command: "zed", appName: "Zed", processName: "zed", bundleIds: ["dev.zed.Zed"] },
+  {
+    id: "sublime",
+    label: "Sublime Text",
+    command: "subl",
+    appName: "Sublime Text",
+    processName: "sublime_text",
+    bundleIds: ["com.sublimetext.4", "com.sublimetext.3"],
+  },
+  {
+    id: "webstorm",
+    label: "WebStorm",
+    command: "webstorm",
+    appName: "WebStorm",
+    processName: "webstorm",
+    bundleIds: ["com.jetbrains.WebStorm"],
+  },
+  {
+    id: "intellij",
+    label: "IntelliJ IDEA",
+    command: "idea",
+    appName: "IntelliJ IDEA",
+    processName: "idea",
+    bundleIds: ["com.jetbrains.intellij", "com.jetbrains.intellij.ce"],
+  },
 ];
 
 export const GIT_GUI_OPTIONS = [
@@ -103,6 +167,7 @@ const DEFAULT_CONFIG: AppConfig = {
   showKeyboardHints: true,
   staleThresholdMinutes: 90,
   cleanupCloseTabs: false,
+  editorAppPaths: {},
 };
 
 export async function loadConfig(): Promise<AppConfig> {

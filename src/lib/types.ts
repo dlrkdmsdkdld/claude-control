@@ -1,6 +1,9 @@
 export type ViewMode = "grid" | "list";
 
-export type SessionStatus = "working" | "idle" | "waiting" | "errored" | "finished";
+/** Editors offered as explicit "Open in …" choices on every card, regardless of the default editor. */
+export const QUICK_OPEN_EDITOR_IDS = ["vscode", "android-studio"];
+
+export type SessionStatus = "working" | "idle" | "waiting" | "errored" | "finished" | "unknown";
 
 export const statusLabels: Record<SessionStatus, string> = {
   working: "Working",
@@ -8,7 +11,31 @@ export const statusLabels: Record<SessionStatus, string> = {
   waiting: "Waiting",
   errored: "Error",
   finished: "Finished",
+  unknown: "상태 확인 불가",
 };
+
+/** What a claude process runs under. */
+export type SessionHostKind = "terminal" | "tmux" | "vscode-extension" | "vscode-terminal" | "app" | "unknown";
+
+export interface SessionHost {
+  kind: SessionHostKind;
+  /** e.g. "iTerm2", "Visual Studio Code", "GitKraken" */
+  appName: string | null;
+  /** .app bundle running the session, when known (VS Code family / other apps) */
+  bundlePath: string | null;
+  /** URL scheme of a VS Code–family editor ("vscode", "cursor", …) */
+  uriScheme: string | null;
+}
+
+/**
+ * How the transcript was linked to the process:
+ * - registry: the CLI's own <configDir>/sessions/<pid>.json
+ * - hook: claude-control status hook event keyed by PID
+ * - args: --resume / --session-id on the command line
+ * - inferred: the only unlinked process in that project, transcript written after it started
+ * - null: no evidence — transcript not linked
+ */
+export type TranscriptLinkSource = "registry" | "hook" | "args" | "inferred";
 
 export interface ClaudeSession {
   id: string;
@@ -29,6 +56,20 @@ export interface ClaudeSession {
   prUrl: string | null;
   orphaned: boolean;
   tmuxSession: string | null;
+  host: SessionHost;
+  /** CLI entrypoint ("cli", "claude-vscode", …) when known */
+  entrypoint: string | null;
+  /** Claude config dir the session belongs to (e.g. ~/.claude-acct2), when known */
+  configDir: string | null;
+  linkSource: TranscriptLinkSource | null;
+  /** Where the status came from; "none" means it could not be determined */
+  statusSource: "registry" | "hook" | "transcript" | "process-exit" | "none";
+  /** Workspace folder of the VS Code window hosting the session, when known */
+  editorWorkspace: string | null;
+  /** Whether the hosting VS Code extension supports opening this conversation by ID */
+  canOpenConversation: boolean;
+  /** Whether typed input (Create PR, quick reply) can be delivered */
+  acceptsInput: boolean;
 }
 
 export interface GitSummary {

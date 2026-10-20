@@ -319,8 +319,10 @@ export function isOrphaned(
   const result = findTerminalInTree(pid, processTree);
   if (result.app !== "unknown") return false;
 
-  // Check for non-GUI ancestors (SSH, etc.) — these aren't orphaned, just remote
-  let currentPid = pid;
+  // Check for non-GUI ancestors (SSH, etc.) — these aren't orphaned, just remote.
+  // A live macOS app ancestor (VS Code extension host / integrated terminal,
+  // GitKraken, IDE terminals…) also hosts the session, even without a known terminal.
+  let currentPid = parentPid(pid, processTree);
   const visited = new Set<number>();
   while (currentPid > 1 && !visited.has(currentPid)) {
     visited.add(currentPid);
@@ -328,10 +330,16 @@ export function isOrphaned(
     if (!entry) break;
     const basename = entry.comm.includes("/") ? entry.comm.split("/").pop() || entry.comm : entry.comm;
     if (NON_ORPHAN_ANCESTORS.has(basename.toLowerCase())) return false;
+    if (entry.comm.includes(".app/Contents/")) return false;
     currentPid = entry.ppid;
   }
 
   return true;
+}
+
+/** Parent of a PID — ancestry walks start there so the process's own comm (which may live in an .app) is ignored. */
+function parentPid(pid: number, processTree: Map<number, ProcessTreeEntry>): number {
+  return processTree.get(pid)?.ppid ?? 0;
 }
 
 /**

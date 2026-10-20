@@ -190,7 +190,7 @@ export function useKeyboardShortcuts({
           if (selectedSession.pid) {
             e.preventDefault();
             openAction("focus", selectedSession);
-            flash("Terminal");
+            flash(selectedSession.host.kind.startsWith("vscode") ? "VS Code" : "Terminal");
           }
           break;
         case "e":
@@ -213,7 +213,12 @@ export function useKeyboardShortcuts({
           flash("Finder");
           break;
         case "a":
-          if (selectedSession.status === "waiting" && selectedSession.pid && selectedSession.hasPendingToolUse) {
+          if (
+            selectedSession.status === "waiting" &&
+            selectedSession.pid &&
+            selectedSession.hasPendingToolUse &&
+            selectedSession.acceptsInput
+          ) {
             e.preventDefault();
             onApproveReject?.(selectedSession.id, "approve");
             sendKeystroke(selectedSession.pid, "return");
@@ -221,7 +226,12 @@ export function useKeyboardShortcuts({
           }
           break;
         case "x":
-          if (selectedSession.status === "waiting" && selectedSession.pid && selectedSession.hasPendingToolUse) {
+          if (
+            selectedSession.status === "waiting" &&
+            selectedSession.pid &&
+            selectedSession.hasPendingToolUse &&
+            selectedSession.acceptsInput
+          ) {
             e.preventDefault();
             onApproveReject?.(selectedSession.id, "reject");
             sendKeystroke(selectedSession.pid, "escape");

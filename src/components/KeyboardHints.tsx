@@ -33,7 +33,8 @@ export function KeyboardHints({
   hideStale?: boolean;
   onDismiss?: () => void;
 }) {
-  const isWaiting = selectedSession?.status === "waiting" && selectedSession?.hasPendingToolUse;
+  const isWaiting =
+    selectedSession?.status === "waiting" && selectedSession?.hasPendingToolUse && selectedSession?.acceptsInput;
   const { editorAvailable, gitGuiAvailable } = useSettings();
   const showStaleHint = (staleCount ?? 0) > 0;
 

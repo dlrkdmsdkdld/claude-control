@@ -28,6 +28,14 @@ function makeSession(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
     prUrl: null,
     orphaned: false,
     tmuxSession: null,
+    host: { kind: "terminal", appName: "iTerm2", bundlePath: null, uriScheme: null },
+    entrypoint: "cli",
+    configDir: null,
+    linkSource: "registry",
+    statusSource: "registry",
+    editorWorkspace: null,
+    canOpenConversation: false,
+    acceptsInput: true,
     ...overrides,
   };
 }

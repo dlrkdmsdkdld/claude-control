@@ -9,6 +9,7 @@ const statusColors: Record<SessionStatus, { dot: string; text: string }> = {
   waiting: { dot: "bg-blue-500", text: "text-blue-400" },
   errored: { dot: "bg-red-500", text: "text-red-400" },
   finished: { dot: "bg-zinc-600", text: "text-zinc-500" },
+  unknown: { dot: "bg-zinc-500 ring-1 ring-zinc-400/40", text: "text-zinc-400" },
 };
 
 export function SessionRow({
@@ -81,6 +82,11 @@ export function SessionRow({
         {session.isWorktree && (
           <span className="shrink-0 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded-sm bg-violet-500/10 border border-violet-500/20 text-violet-400">
             wt
+          </span>
+        )}
+        {(session.host.kind === "vscode-extension" || session.host.kind === "vscode-terminal") && (
+          <span className="shrink-0 px-1 py-0.5 text-[8px] font-semibold tracking-wider rounded-sm bg-sky-500/10 border border-sky-500/20 text-sky-400">
+            {session.host.kind === "vscode-extension" ? "VS Code" : "VS Code 터미널"}
           </span>
         )}
       </div>

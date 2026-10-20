@@ -15,7 +15,9 @@ import {
   TERMINAL_OPEN_IN_OPTIONS,
   TERMINAL_TMUX_MODE_OPTIONS,
 } from "@/lib/config";
+import { LaunchError, resolveEditorApp } from "@/lib/editor-launcher";
 import { getShellEnv } from "@/lib/shell-env";
+import { buildProcessTree } from "@/lib/terminal";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,6 +48,33 @@ async function checkInstalledApps<T extends { appName: string; command?: string 
       }
       const results = await Promise.all(checks);
       return { ...opt, installed: results.some(Boolean) };
+    }),
+  );
+}
+
+/** Editors are resolved the same way the open action does, so "installed" matches what will launch. */
+async function checkEditors(appPaths: Record<string, string>) {
+  const tree = await buildProcessTree();
+  return Promise.all(
+    EDITOR_OPTIONS.map(async (opt) => {
+      if (!opt.appName) return { ...opt, installed: true, appPath: null, appSource: null, appError: null };
+      try {
+        const resolved = await resolveEditorApp(opt, appPaths[opt.id], tree);
+        if (resolved)
+          return { ...opt, installed: true, appPath: resolved.bundlePath, appSource: resolved.source, appError: null };
+      } catch (err) {
+        if (err instanceof LaunchError) {
+          return { ...opt, installed: false, appPath: appPaths[opt.id], appSource: "settings", appError: err.message };
+        }
+      }
+      // No bundle found — the CLI alone still works as a fallback
+      const hasCli = opt.command
+        ? await execFileAsync("which", [opt.command], { timeout: 3000, env: await getShellEnv() }).then(
+            () => true,
+            () => false,
+          )
+        : false;
+      return { ...opt, installed: hasCli, appPath: null, appSource: null, appError: null };
     }),
   );
 }
@@ -122,11 +151,11 @@ async function checkDependencies(): Promise<(DependencyDef & { installed: boolea
 
 export async function GET() {
   try {
-    const [config, terminalApps, browsers, editors, gitGuis, dependencies] = await Promise.all([
-      loadConfig(),
+    const config = await loadConfig();
+    const [terminalApps, browsers, editors, gitGuis, dependencies] = await Promise.all([
       checkInstalledApps(TERMINAL_APP_OPTIONS, new Set(["Terminal"])),
       checkInstalledApps(BROWSER_OPTIONS, new Set(["Safari"])),
-      checkInstalledApps(EDITOR_OPTIONS),
+      checkEditors(config.editorAppPaths ?? {}),
       checkInstalledApps(GIT_GUI_OPTIONS),
       checkDependencies(),
     ]);
@@ -147,6 +176,15 @@ export async function GET() {
     console.error("Failed to load settings:", error);
     return NextResponse.json({ error: "Failed to load settings" }, { status: 500 });
   }
+}
+
+function sanitizeAppPaths(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const out: Record<string, string> = {};
+  for (const [id, p] of Object.entries(value as Record<string, unknown>)) {
+    if (EDITOR_OPTIONS.some((e) => e.id === id) && typeof p === "string" && p.endsWith(".app")) out[id] = p;
+  }
+  return out;
 }
 
 export async function PUT(request: Request) {
@@ -176,6 +214,7 @@ export async function PUT(request: Request) {
           ? Math.floor(body.staleThresholdMinutes)
           : current.staleThresholdMinutes,
       cleanupCloseTabs: body.cleanupCloseTabs ?? current.cleanupCloseTabs,
+      editorAppPaths: sanitizeAppPaths(body.editorAppPaths) ?? current.editorAppPaths,
     };
 
     await saveConfig(updated);

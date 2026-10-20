@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { mutate } from "swr";
 import { ScreenPicker } from "@/components/ScreenPicker";
 
 interface VersionInfo {
@@ -20,6 +21,23 @@ interface OptionDef {
 interface AppOptionDef extends OptionDef {
   installed: boolean;
 }
+
+interface EditorOptionDef extends AppOptionDef {
+  appName: string;
+  appPath: string | null;
+  appSource: "settings" | "running" | "standard-location" | "spotlight" | null;
+  appError: string | null;
+}
+
+const APP_SOURCE_LABELS: Record<NonNullable<EditorOptionDef["appSource"]>, string> = {
+  settings: "직접 선택",
+  running: "실행 중인 앱에서 감지",
+  "standard-location": "자동 감지",
+  spotlight: "Spotlight로 감지",
+};
+
+/** Editors whose app location can be chosen in Settings. */
+const APP_PATH_EDITORS = ["vscode", "android-studio"];
 
 interface DependencyDef {
   id: string;
@@ -49,9 +67,10 @@ interface SettingsData {
     showKeyboardHints: boolean;
     staleThresholdMinutes: number;
     cleanupCloseTabs: boolean;
+    editorAppPaths: Record<string, string>;
   };
   options: {
-    editors: AppOptionDef[];
+    editors: EditorOptionDef[];
     gitGuis: AppOptionDef[];
     browsers: AppOptionDef[];
     terminalApps: AppOptionDef[];
@@ -289,6 +308,48 @@ export default function SettingsPage() {
     setAddingDir(false);
   };
 
+  const reloadSettings = async () => {
+    const d = (await fetch("/api/settings").then((r) => r.json())) as SettingsData;
+    setData(d);
+    mutate("/api/settings");
+  };
+
+  const [appPathError, setAppPathError] = useState<string | null>(null);
+
+  const setEditorAppPath = async (editorId: string, appPath: string | null) => {
+    if (!data) return;
+    const paths = { ...(data.config.editorAppPaths ?? {}) };
+    if (appPath) paths[editorId] = appPath;
+    else delete paths[editorId];
+    await save({ editorAppPaths: paths });
+    await reloadSettings();
+  };
+
+  const pickEditorApp = async (editorId: string) => {
+    setAppPathError(null);
+    const api = (
+      window as unknown as {
+        electronAPI?: { pickApp?: (title: string) => Promise<{ cancelled?: boolean; path?: string }> };
+      }
+    ).electronAPI;
+    let picked: string | null = null;
+    if (api?.pickApp) {
+      const label = data?.options.editors.find((e) => e.id === editorId)?.label ?? "앱";
+      const res = await api.pickApp(`${label} 앱 선택`);
+      if (res.cancelled || !res.path) return;
+      picked = res.path;
+    } else {
+      // Browser (dev) fallback: no native picker available
+      picked = window.prompt(".app 경로를 입력하세요 (예: /Users/me/Desktop/Visual Studio Code.app)");
+      if (!picked) return;
+    }
+    if (!picked.endsWith(".app")) {
+      setAppPathError(".app 번들을 선택하세요.");
+      return;
+    }
+    await setEditorAppPath(editorId, picked);
+  };
+
   const removeDirectory = (dir: string) => {
     if (!data) return;
     const dirs = data.config.codeDirectories.filter((d) => d !== dir);
@@ -410,8 +471,53 @@ export default function SettingsPage() {
             description="Opens when you click the editor button on a session card"
             value={data.config.editor}
             options={data.options.editors}
-            onChange={(editor) => save({ editor })}
+            onChange={async (editor) => {
+              await save({ editor });
+              mutate("/api/settings");
+            }}
           />
+          {data.options.editors
+            .filter((ed) => APP_PATH_EDITORS.includes(ed.id))
+            .map((ed) => (
+              <div key={ed.id} className="flex items-center justify-between py-4 border-b border-white/4">
+                <div className="flex-1 min-w-0 mr-4">
+                  <h3 className="text-sm font-medium text-zinc-200">{ed.label} 앱 위치</h3>
+                  {ed.appError ? (
+                    <p className="text-xs text-red-400 mt-0.5">{ed.appError}</p>
+                  ) : ed.appPath ? (
+                    <p className="text-xs text-zinc-500 mt-0.5 truncate font-(family-name:--font-geist-mono)">
+                      {ed.appPath}
+                      {ed.appSource ? ` · ${APP_SOURCE_LABELS[ed.appSource]}` : ""}
+                    </p>
+                  ) : ed.installed ? (
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      .app을 찾지 못해 &apos;{ed.id === "vscode" ? "code" : "studio"}&apos; 명령으로 엽니다
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-400/90 mt-0.5">
+                      {ed.appName}.app을 찾지 못했습니다. 설치했다면 &apos;선택…&apos;으로 위치를 지정하세요.
+                    </p>
+                  )}
+                  {appPathError && <p className="text-xs text-red-400 mt-0.5">{appPathError}</p>}
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  {data.config.editorAppPaths?.[ed.id] && (
+                    <button
+                      onClick={() => setEditorAppPath(ed.id, null)}
+                      className="px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/7"
+                    >
+                      자동 감지
+                    </button>
+                  )}
+                  <button
+                    onClick={() => pickEditorApp(ed.id)}
+                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-300 hover:text-white bg-white/4 hover:bg-white/8 border border-white/7"
+                  >
+                    선택…
+                  </button>
+                </div>
+              </div>
+            ))}
           <SettingRow
             label="Git GUI"
             description="Opens when you click the git button on a session card"

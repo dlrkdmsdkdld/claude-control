@@ -57,12 +57,25 @@ export default function SessionDetailPage() {
           <h1 className="text-2xl font-bold tracking-tight text-zinc-100">{session.repoName || "Unknown"}</h1>
           <p className="text-sm text-zinc-500 font-(family-name:--font-geist-mono) mt-1">{session.workingDirectory}</p>
           {session.pid && (
-            <p className="text-xs text-zinc-600 font-(family-name:--font-geist-mono) mt-1">PID {session.pid}</p>
+            <p className="text-xs text-zinc-600 font-(family-name:--font-geist-mono) mt-1">
+              PID {session.pid}
+              {session.entrypoint ? ` · ${session.entrypoint}` : ""}
+              {session.configDir ? ` · ${session.configDir}` : ""}
+              {session.jsonlPath ? "" : " · 기록 연결 안 됨"}
+            </p>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <StatusBadge status={session.status} />
-          <QuickActions path={session.workingDirectory} pid={session.pid} targetScreen={targetScreen} />
+          <StatusBadge status={session.status} orphaned={session.orphaned} />
+          <QuickActions
+            path={session.workingDirectory}
+            pid={session.pid}
+            targetScreen={targetScreen}
+            host={session.host}
+            acceptsInput={session.acceptsInput}
+            canOpenConversation={session.canOpenConversation}
+            editorWorkspace={session.editorWorkspace}
+          />
         </div>
       </div>
 

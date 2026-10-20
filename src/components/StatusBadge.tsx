@@ -6,6 +6,7 @@ const statusConfig: Record<SessionStatus, { dotColor: string; textColor: string;
   waiting: { dotColor: "bg-blue-400", textColor: "text-blue-300", bgColor: "bg-blue-500/10", pulse: true },
   errored: { dotColor: "bg-red-400", textColor: "text-red-300", bgColor: "bg-red-500/10", pulse: false },
   finished: { dotColor: "bg-zinc-500", textColor: "text-zinc-400", bgColor: "bg-zinc-500/10", pulse: false },
+  unknown: { dotColor: "bg-zinc-500", textColor: "text-zinc-300", bgColor: "bg-zinc-500/15", pulse: false },
 };
 
 const staleConfig = {

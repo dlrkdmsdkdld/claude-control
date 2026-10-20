@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { promisify } from "util";
 import { CHROMIUM_BROWSERS } from "@/lib/close-tabs";
 import { BROWSER_OPTIONS, EDITOR_OPTIONS, GIT_GUI_OPTIONS, loadConfig } from "@/lib/config";
+import { discoverSessions } from "@/lib/discovery";
+import { LaunchError, openInEditor } from "@/lib/editor-launcher";
 import {
   buildProcessTree,
   detectAllTmuxPanes,
@@ -13,11 +15,47 @@ import {
   sendText,
 } from "@/lib/terminal";
 import { escapeForAppleScript } from "@/lib/terminal/adapters/shared";
+import type { ClaudeSession } from "@/lib/types";
+import { conversationUri } from "@/lib/vscode";
 
 const execFileAsync = promisify(execFile);
 const execAsync = promisify(exec);
 
-type ActionType = "focus" | "iterm" | "editor" | "finder" | "git-gui" | "send-message" | "send-keystroke" | "open-url";
+type ActionType =
+  | "focus"
+  | "iterm"
+  | "editor"
+  | "finder"
+  | "git-gui"
+  | "send-message"
+  | "send-keystroke"
+  | "open-url"
+  | "open-conversation";
+
+const VSCODE_DEF = EDITOR_OPTIONS.find((e) => e.id === "vscode")!;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function failure(error: string, hint: string, status = 422, attempts: string[] = []) {
+  return NextResponse.json({ error, hint, attempts }, { status });
+}
+
+/** Look the session up server-side so host/app paths never come from the client. */
+async function findLiveSession(pid: number): Promise<ClaudeSession | null> {
+  const sessions = await discoverSessions();
+  return sessions.find((s) => s.pid === pid) ?? null;
+}
+
+/** Bring the VS Code window that hosts the session to the front (reusing it). */
+async function focusEditorWindow(session: ClaudeSession) {
+  const folder = session.editorWorkspace ?? session.workingDirectory;
+  const config = await loadConfig();
+  const tree = await buildProcessTree();
+  return openInEditor(VSCODE_DEF, folder, {
+    overridePath: config.editorAppPaths?.vscode,
+    processTree: tree,
+    preferBundle: session.host.bundlePath,
+  });
+}
 
 /**
  * Move the frontmost window of an app to a target screen.
@@ -67,7 +105,8 @@ return "ok"
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { action, path, pid, targetScreen, message, url, keystroke } = body as {
+    const { action, path, pid, targetScreen, message, url, keystroke, editorId } = body as {
+      editorId?: string;
       action: ActionType;
       path?: string;
       pid?: number;
@@ -88,7 +127,8 @@ export async function POST(request: Request) {
       normalizedAction !== "focus" &&
       normalizedAction !== "send-message" &&
       normalizedAction !== "send-keystroke" &&
-      normalizedAction !== "open-url"
+      normalizedAction !== "open-url" &&
+      normalizedAction !== "open-conversation"
     ) {
       if (!path) {
         return NextResponse.json({ error: "Missing path" }, { status: 400 });
@@ -96,14 +136,33 @@ export async function POST(request: Request) {
       try {
         await stat(path);
       } catch {
-        return NextResponse.json({ error: "Path does not exist" }, { status: 404 });
+        return failure(`폴더가 존재하지 않습니다: ${path}`, "worktree가 삭제됐거나 경로가 이동됐을 수 있습니다.", 404);
       }
     }
+
+    // Which launch path succeeded (reported back for diagnostics)
+    let launchMethod: string | undefined;
 
     switch (normalizedAction) {
       case "focus": {
         if (!pid) {
           return NextResponse.json({ error: "Missing pid for focus action" }, { status: 400 });
+        }
+        const session = await findLiveSession(pid);
+        if (!session) return failure("세션 프로세스를 찾을 수 없습니다.", "세션이 이미 종료됐을 수 있습니다.", 404);
+        if (session.host.kind === "vscode-extension" || session.host.kind === "vscode-terminal") {
+          launchMethod = (await focusEditorWindow(session)).method;
+          break;
+        }
+        if (session.host.kind === "app" && session.host.bundlePath) {
+          await execFileAsync("open", ["-a", session.host.bundlePath], { timeout: 10000 });
+          break;
+        }
+        if (session.host.kind === "unknown") {
+          return failure(
+            "이 세션을 실행 중인 터미널 창을 찾지 못했습니다.",
+            "터미널이 닫혔거나 지원하지 않는 앱에서 실행 중입니다. tmux 세션이면 Reattach를 사용하세요.",
+          );
         }
         const [tree, panes] = await Promise.all([buildProcessTree(), detectAllTmuxPanes()]);
         const info = await detectTerminal(pid, tree, panes);
@@ -112,15 +171,43 @@ export async function POST(request: Request) {
       }
       case "editor": {
         const config = await loadConfig();
-        const editorDef = EDITOR_OPTIONS.find((e) => e.id === config.editor);
-        if (!editorDef || !editorDef.command) {
-          return NextResponse.json({ error: "No editor configured" }, { status: 400 });
+        const editorDef = EDITOR_OPTIONS.find((e) => e.id === (editorId ?? config.editor));
+        if (!editorDef || !editorDef.appName) {
+          return failure(
+            "기본 에디터가 설정돼 있지 않습니다.",
+            "Settings → Tools → Code Editor에서 에디터를 선택하세요.",
+            400,
+          );
         }
-        await execFileAsync(editorDef.command, [path!]);
+        const tree = await buildProcessTree();
+        const opened = await openInEditor(editorDef, path!, {
+          overridePath: config.editorAppPaths?.[editorDef.id],
+          processTree: tree,
+        });
+        launchMethod = opened.method;
         if (targetScreen !== undefined) {
           await new Promise((r) => setTimeout(r, 800));
-          await moveAppToScreen(editorDef.processName, targetScreen);
+          await moveAppToScreen(editorDef.appName, targetScreen);
         }
+        break;
+      }
+      case "open-conversation": {
+        if (!pid) return NextResponse.json({ error: "Missing pid" }, { status: 400 });
+        const session = await findLiveSession(pid);
+        if (!session) return failure("세션 프로세스를 찾을 수 없습니다.", "세션이 이미 종료됐을 수 있습니다.", 404);
+        if (session.host.kind !== "vscode-extension" || !session.canOpenConversation || !UUID_RE.test(session.id)) {
+          return failure(
+            "이 세션은 VS Code 대화 탭 열기를 지원하지 않습니다.",
+            "VS Code 확장 세션이 아니거나, 설치된 Claude Code 확장이 대화 열기 URI를 지원하지 않습니다. 'VS Code 창으로 이동'을 사용하세요.",
+          );
+        }
+        // Focus the hosting window first: the extension handles the URI in the
+        // active window, revealing the tab if that window holds the conversation.
+        const opened = await focusEditorWindow(session);
+        launchMethod = opened.method;
+        await new Promise((r) => setTimeout(r, 700));
+        const uri = conversationUri(session.host.uriScheme ?? "vscode", session.id);
+        await execFileAsync("open", opened.bundlePath ? ["-a", opened.bundlePath, uri] : [uri], { timeout: 10000 });
         break;
       }
       case "finder":
@@ -150,6 +237,14 @@ export async function POST(request: Request) {
         if (!message) {
           return NextResponse.json({ error: "Missing message" }, { status: 400 });
         }
+        const target = await findLiveSession(pid);
+        if (target && !target.acceptsInput) {
+          return failure(
+            "이 세션에는 메시지를 보낼 수 없습니다.",
+            "VS Code 확장 등 터미널이 아닌 환경의 세션입니다. 해당 앱에서 직접 입력하세요.",
+            409,
+          );
+        }
         const [tree, panes] = await Promise.all([buildProcessTree(), detectAllTmuxPanes()]);
         const info = await detectTerminal(pid, tree, panes);
         await sendText(info, message);
@@ -161,6 +256,14 @@ export async function POST(request: Request) {
         }
         if (!keystroke) {
           return NextResponse.json({ error: "Missing keystroke" }, { status: 400 });
+        }
+        const target = await findLiveSession(pid);
+        if (target && !target.acceptsInput) {
+          return failure(
+            "이 세션에는 키 입력을 보낼 수 없습니다.",
+            "VS Code 확장 등 터미널이 아닌 환경의 세션입니다. 해당 앱에서 직접 승인·거절하세요.",
+            409,
+          );
         }
         const [tree, panes] = await Promise.all([buildProcessTree(), detectAllTmuxPanes()]);
         const info = await detectTerminal(pid, tree, panes);
@@ -212,9 +315,13 @@ end tell`;
         return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, method: launchMethod });
   } catch (error) {
-    console.error("Action failed:", error);
-    return NextResponse.json({ error: "Action failed" }, { status: 500 });
+    if (error instanceof LaunchError) {
+      return failure(error.message, error.hint, 422, error.attempts);
+    }
+    console.error("Action failed:", error instanceof Error ? error.message : error);
+    const msg = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    return failure(`실행에 실패했습니다: ${msg}`, "앱 설치 위치와 권한을 확인하세요.", 500);
   }
 }
