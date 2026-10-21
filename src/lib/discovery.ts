@@ -16,7 +16,13 @@ import {
   sessionIdFromArgs,
 } from "./process-utils";
 import { detectSessionHost, hasToolChild, hostAcceptsTerminalInput } from "./session-host";
-import { chooseSessionId, pickInferredTranscript, resolveStatus, TranscriptCandidate } from "./session-link";
+import {
+  chooseSessionId,
+  markRecentlyDone,
+  pickInferredTranscript,
+  resolveStatus,
+  TranscriptCandidate,
+} from "./session-link";
 import { loadSessionMeta } from "./session-meta";
 import {
   extractBranch,
@@ -202,7 +208,7 @@ async function buildSession(
   const runningTool = toolUseStartedAt !== null && hasToolChild(info.pid, processTree, Date.now() - toolUseStartedAt);
   const recentlyAwaitingReply =
     awaitingAssistant && mtime !== null && Date.now() - mtime.getTime() < AWAITING_REPLY_MAX_MS;
-  const { status, source: statusSource } = resolveStatus({
+  const { status: resolvedStatus, source: statusSource } = resolveStatus({
     registryStatus: registry?.status ?? null,
     registryStale,
     hookStatus: ctx.hook?.status ?? null,
@@ -221,6 +227,12 @@ async function buildSession(
             isAskingForInput: askingForInput,
             hasPendingToolUse: pendingToolUse,
           }),
+  });
+
+  const status = markRecentlyDone(resolvedStatus, {
+    assistantIsNewer: preview.assistantIsNewer,
+    lastActivityMs: mtime?.getTime() ?? null,
+    now: Date.now(),
   });
 
   const entrypoint = registry?.entrypoint ?? details?.env.entrypoint ?? null;

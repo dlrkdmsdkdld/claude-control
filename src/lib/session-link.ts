@@ -51,6 +51,21 @@ export function resolveStatus(input: StatusInput): { status: SessionStatus; sour
   return { status: "unknown", source: "none" };
 }
 
+/** How long an idle session reads as "done" after its last turn ended. */
+export const RECENTLY_DONE_MS = 5 * 60_000;
+
+/**
+ * Idle within a few minutes of the agent's last reply means the work just
+ * finished; shown as "done" so it stands out from sessions idle for a while.
+ */
+export function markRecentlyDone(
+  status: SessionStatus,
+  input: { assistantIsNewer: boolean; lastActivityMs: number | null; now: number },
+): SessionStatus {
+  if (status !== "idle" || !input.assistantIsNewer || input.lastActivityMs === null) return status;
+  return input.now - input.lastActivityMs < RECENTLY_DONE_MS ? "done" : status;
+}
+
 export interface TranscriptCandidate {
   path: string;
   mtimeMs: number;

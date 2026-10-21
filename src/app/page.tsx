@@ -224,13 +224,16 @@ export default function Dashboard() {
           pendingIdleNotifications.current.delete(session.id);
         }
 
+        const settled = session.status === "idle" || session.status === "done";
         if (
           prev &&
           prev !== session.status &&
-          (session.status === "waiting" || session.status === "idle" || session.status === "finished")
+          (session.status === "waiting" ||
+            session.status === "finished" ||
+            (settled && prev !== "idle" && prev !== "done"))
         ) {
-          // "idle" gets a delayed notification to avoid false triggers between turns
-          if (session.status === "idle") {
+          // "idle"/"done" get a delayed notification to avoid false triggers between turns
+          if (settled) {
             if (!pendingIdleNotifications.current.has(session.id)) {
               const sid = session.id;
               const timer = setTimeout(() => {
@@ -269,7 +272,10 @@ export default function Dashboard() {
           if (prevConfirmed && prevConfirmed !== session.status) {
             if (
               prevConfirmed === "working" &&
-              (session.status === "waiting" || session.status === "idle" || session.status === "finished")
+              (session.status === "waiting" ||
+                session.status === "done" ||
+                session.status === "idle" ||
+                session.status === "finished")
             ) {
               changed.add(session.id);
             }

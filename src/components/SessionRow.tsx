@@ -5,6 +5,7 @@ import { PrStatusBadge } from "./PrStatusBadge";
 
 const statusColors: Record<SessionStatus, { dot: string; text: string }> = {
   working: { dot: "bg-emerald-500", text: "text-emerald-400" },
+  done: { dot: "bg-fuchsia-400", text: "text-fuchsia-300" },
   idle: { dot: "bg-amber-500", text: "text-amber-400" },
   waiting: { dot: "bg-blue-500", text: "text-blue-400" },
   errored: { dot: "bg-red-500", text: "text-red-400" },

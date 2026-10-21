@@ -10,6 +10,7 @@ import { getGitSummary, getMainWorktreePath, getPrUrl } from "./git-info";
 import { repoNameFromPath } from "./paths";
 import { decodeLsofName, getBatchWorkingDirectories } from "./process-utils";
 import { detectSessionHost, hasToolChild, hostAcceptsTerminalInput } from "./session-host";
+import { markRecentlyDone } from "./session-link";
 import { getJsonlMtime, readJsonlTail } from "./session-reader";
 import { getTtysForPids } from "./terminal/detect";
 import type { ProcessTreeEntry } from "./terminal/types";
@@ -263,13 +264,17 @@ async function buildCodexSession(
   ]);
 
   const state = codexTurnState(lines);
+  const preview = codexPreview(lines);
   const status: SessionStatus =
     lines.length === 0
       ? "unknown"
-      : codexStatus(state, {
-          now: ctx.now,
-          toolRunning: (since) => hasToolChild(ctx.holder, ctx.processTree, ctx.now - since),
-        });
+      : markRecentlyDone(
+          codexStatus(state, {
+            now: ctx.now,
+            toolRunning: (since) => hasToolChild(ctx.holder, ctx.processTree, ctx.now - since),
+          }),
+          { assistantIsNewer: preview.assistantIsNewer, lastActivityMs: mtime?.getTime() ?? null, now: ctx.now },
+        );
 
   const branch = git?.branch ?? row.git_branch ?? null;
   const skipPrLookup = !branch || branch === "main" || branch === "master";
@@ -301,7 +306,7 @@ async function buildCodexSession(
     lastActivity: (mtime ?? new Date(ctx.now)).toISOString(),
     startedAt,
     git,
-    preview: codexPreview(lines),
+    preview,
     hasPendingToolUse: false,
     taskSummary: row.title
       ? { title: row.title.slice(0, 120), description: null, source: "prompt", ticketId: null, ticketUrl: null }

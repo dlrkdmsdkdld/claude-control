@@ -28,6 +28,11 @@ const cardStyles: Record<SessionStatus, { border: string; glow: string; accent: 
     glow: "glow-green",
     accent: "from-emerald-500/15 to-transparent",
   },
+  done: {
+    border: "border-fuchsia-400/70 hover:border-fuchsia-300/90",
+    glow: "glow-fuchsia",
+    accent: "from-fuchsia-500/25 to-transparent",
+  },
   idle: {
     border: "border-amber-500/35 hover:border-amber-400/60",
     glow: "glow-yellow",
@@ -142,7 +147,11 @@ export function SessionCard({
   const { cleanupCloseTabs } = useSettings();
 
   const canCleanup =
-    session.isWorktree && (displayStatus === "idle" || displayStatus === "waiting" || displayStatus === "finished");
+    session.isWorktree &&
+    (displayStatus === "idle" ||
+      displayStatus === "done" ||
+      displayStatus === "waiting" ||
+      displayStatus === "finished");
 
   async function handleCleanup(e: React.MouseEvent) {
     e.preventDefault();

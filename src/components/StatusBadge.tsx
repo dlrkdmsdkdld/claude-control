@@ -2,6 +2,7 @@ import { SessionStatus, statusLabels } from "@/lib/types";
 
 const statusConfig: Record<SessionStatus, { dotColor: string; textColor: string; bgColor: string; pulse: boolean }> = {
   working: { dotColor: "bg-emerald-400", textColor: "text-emerald-300", bgColor: "bg-emerald-500/10", pulse: true },
+  done: { dotColor: "bg-fuchsia-400", textColor: "text-fuchsia-200", bgColor: "bg-fuchsia-500/20", pulse: true },
   idle: { dotColor: "bg-amber-400", textColor: "text-amber-300", bgColor: "bg-amber-500/10", pulse: false },
   waiting: { dotColor: "bg-blue-400", textColor: "text-blue-300", bgColor: "bg-blue-500/10", pulse: true },
   errored: { dotColor: "bg-red-400", textColor: "text-red-300", bgColor: "bg-red-500/10", pulse: false },

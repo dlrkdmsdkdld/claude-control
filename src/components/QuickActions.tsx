@@ -218,7 +218,7 @@ export function QuickActions({
     }
   };
 
-  const showPRButton = pid && acceptsInput && (status === "idle" || status === "waiting");
+  const showPRButton = pid && acceptsInput && (status === "idle" || status === "done" || status === "waiting");
 
   // Ends the claude process (SIGTERM, then SIGKILL). Two clicks so it can't be
   // mistaken for a window switch.

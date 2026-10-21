@@ -3,6 +3,7 @@ import { ClaudeSession } from "@/lib/types";
 
 const STATUS_COLORS: Record<string, string> = {
   waiting: "#3b82f6", // blue-500
+  done: "#d946ef", // fuchsia-500
   idle: "#f59e0b", // amber-500
   finished: "#71717a", // zinc-500
 };

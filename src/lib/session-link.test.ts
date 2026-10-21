@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { HookStatus } from "./hooks-reader";
-import { chooseSessionId, pickInferredTranscript, resolveStatus } from "./session-link";
+import { chooseSessionId, markRecentlyDone, pickInferredTranscript, resolveStatus } from "./session-link";
 import type { RegistryEntry } from "./session-registry";
 
 const registry = (sessionId: string | null, status: string | null = "idle"): RegistryEntry => ({
@@ -128,5 +128,21 @@ describe("pickInferredTranscript", () => {
 
   it("refuses without a known process start time", () => {
     expect(pickInferredTranscript(files, new Set(), null, 1)).toBeNull();
+  });
+});
+
+describe("markRecentlyDone", () => {
+  const now = 1_000_000_000;
+
+  it("marks idle as done within 5 minutes of the agent's last reply", () => {
+    expect(markRecentlyDone("idle", { assistantIsNewer: true, lastActivityMs: now - 60_000, now })).toBe("done");
+    expect(markRecentlyDone("idle", { assistantIsNewer: true, lastActivityMs: now - 6 * 60_000, now })).toBe("idle");
+  });
+
+  it("leaves other statuses and sessions without a reply alone", () => {
+    expect(markRecentlyDone("working", { assistantIsNewer: true, lastActivityMs: now, now })).toBe("working");
+    expect(markRecentlyDone("waiting", { assistantIsNewer: true, lastActivityMs: now, now })).toBe("waiting");
+    expect(markRecentlyDone("idle", { assistantIsNewer: false, lastActivityMs: now, now })).toBe("idle");
+    expect(markRecentlyDone("idle", { assistantIsNewer: true, lastActivityMs: null, now })).toBe("idle");
   });
 });

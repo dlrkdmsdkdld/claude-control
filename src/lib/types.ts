@@ -3,10 +3,11 @@ export type ViewMode = "grid" | "list";
 /** Editors offered as explicit "Open in …" choices on every card, regardless of the default editor. */
 export const QUICK_OPEN_EDITOR_IDS = ["vscode", "android-studio"];
 
-export type SessionStatus = "working" | "idle" | "waiting" | "errored" | "finished" | "unknown";
+export type SessionStatus = "working" | "done" | "idle" | "waiting" | "errored" | "finished" | "unknown";
 
 export const statusLabels: Record<SessionStatus, string> = {
   working: "Working",
+  done: "Done",
   idle: "Idle",
   waiting: "Waiting",
   errored: "Error",
