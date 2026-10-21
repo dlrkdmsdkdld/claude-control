@@ -40,6 +40,12 @@ describe("isAuxiliaryClaudeArgs", () => {
     expect(isAuxiliaryClaudeArgs("claude mcp serve")).toBe(true);
   });
 
+  it("skips one-shot print-mode runs (e.g. a script polling usage)", () => {
+    expect(isAuxiliaryClaudeArgs("claude -p /usage")).toBe(true);
+    expect(isAuxiliaryClaudeArgs("claude --print hello")).toBe(true);
+    expect(isAuxiliaryClaudeArgs("claude -p --input-format stream-json --output-format stream-json")).toBe(false);
+  });
+
   it("keeps conversations", () => {
     expect(isAuxiliaryClaudeArgs("claude")).toBe(false);
     expect(isAuxiliaryClaudeArgs("claude --output-format stream-json --input-format stream-json")).toBe(false);

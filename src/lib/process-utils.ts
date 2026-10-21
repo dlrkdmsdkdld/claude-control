@@ -134,8 +134,16 @@ const AUXILIARY_ARGS = [
   /(?:^|\s)--daemon(?:\s|$)/,
 ];
 
+/**
+ * Helper processes and one-shot runs that aren't conversations. `claude -p`
+ * (print mode, e.g. a script polling `claude -p /usage`) exits after one reply;
+ * SDK hosts that keep streaming input (`--input-format stream-json`) are kept.
+ */
 export function isAuxiliaryClaudeArgs(args: string): boolean {
-  return AUXILIARY_ARGS.some((re) => re.test(args));
+  if (AUXILIARY_ARGS.some((re) => re.test(args))) return true;
+  const printMode = /(?:^|\s)(?:-p|--print)(?:\s|=|$)/.test(args);
+  const streamingInput = /(?:^|\s)--input-format(?:=|\s+)stream-json(?:\s|$)/.test(args);
+  return printMode && !streamingInput;
 }
 
 /** Session ID passed on the command line (`--resume=<id>`, `--resume <id>`, `--session-id <id>`). */

@@ -1,11 +1,50 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import { sendKeystrokeAction } from "@/lib/actions";
 import { groupSessions } from "@/lib/group-sessions";
 import { isSessionStale } from "@/lib/stale";
-import { ClaudeSession, PrStatus, ViewMode } from "@/lib/types";
+import { ClaudeSession, PrStatus, statusLabels, ViewMode } from "@/lib/types";
 import { SessionCard } from "./SessionCard";
 import { SessionRow } from "./SessionRow";
+
+const COLLAPSED_GROUPS_KEY = "collapsedGroups";
+
+/** Collapsed repo groups, remembered per viewer (storage may be unavailable). */
+function useCollapsedGroups() {
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem(COLLAPSED_GROUPS_KEY);
+      return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = useCallback((repoPath: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(repoPath)) next.delete(repoPath);
+      else next.add(repoPath);
+      try {
+        localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify(Array.from(next)));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
+  return { collapsed, toggle };
+}
+
+/** "Working 1 · Finished 8" for a collapsed group. */
+function statusSummary(sessions: ClaudeSession[]): string {
+  const counts = new Map<string, number>();
+  for (const s of sessions) counts.set(statusLabels[s.status], (counts.get(statusLabels[s.status]) ?? 0) + 1);
+  return Array.from(counts)
+    .map(([label, n]) => `${label} ${n}`)
+    .join(" · ");
+}
 
 function prettifyName(name: string): string {
   return name.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -130,6 +169,8 @@ export function SessionGrid({
   onSaveMeta?: (sessionId: string, updates: { title?: string; description?: string }) => void;
   onCancelEdit?: () => void;
 }) {
+  const { collapsed, toggle } = useCollapsedGroups();
+
   if (sessions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-32">
@@ -258,13 +299,33 @@ export function SessionGrid({
 
   const renderGroupHeader = (group: (typeof groups)[0], showCount = true) => {
     const accent = accentMap.get(group.repoName) ?? REPO_ACCENTS[0];
+    const isCollapsed = collapsed.has(group.repoPath);
     return (
-      <div className={`flex items-center gap-3 ${viewMode === "list" ? "mb-2" : "mb-4"}`}>
-        <div className="flex items-center gap-2.5">
+      <div className={`flex items-center gap-3 ${isCollapsed ? "" : viewMode === "list" ? "mb-2" : "mb-4"}`}>
+        <button
+          onClick={() => toggle(group.repoPath)}
+          className="flex items-center gap-2.5 group/collapse"
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? "그룹 펼치기" : "그룹 접기"}
+        >
+          <svg
+            className={`w-3 h-3 text-zinc-600 group-hover/collapse:text-zinc-300 transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
           <span className={`w-2 h-2 rounded-full ${accent.dot} ${accent.glow}`} />
           <h2 className={`text-sm font-semibold ${accent.text}`}>{prettifyName(group.repoName)}</h2>
-        </div>
-        {showCount && (
+        </button>
+        {isCollapsed && (
+          <span className="text-[11px] text-zinc-500 font-(family-name:--font-geist-mono)">
+            {statusSummary(group.sessions)}
+          </span>
+        )}
+        {showCount && !isCollapsed && (
           <span className="text-[11px] text-zinc-600 font-(family-name:--font-geist-mono)">
             {group.sessions.length} session{group.sessions.length !== 1 ? "s" : ""}
           </span>
@@ -291,7 +352,7 @@ export function SessionGrid({
       {multiSessionGroups.map((group) => (
         <div key={group.repoPath}>
           {renderGroupHeader(group)}
-          {renderSessions(group.sessions)}
+          {!collapsed.has(group.repoPath) && renderSessions(group.sessions)}
         </div>
       ))}
 
@@ -301,7 +362,7 @@ export function SessionGrid({
           {singleSessionGroups.map((group) => (
             <div key={group.repoPath}>
               {renderGroupHeader(group, false)}
-              {renderCard(group.sessions[0])}
+              {!collapsed.has(group.repoPath) && renderCard(group.sessions[0])}
             </div>
           ))}
         </div>
@@ -313,7 +374,7 @@ export function SessionGrid({
           {singleSessionGroups.map((group) => (
             <div key={group.repoPath}>
               {renderGroupHeader(group)}
-              {renderSessions(group.sessions)}
+              {!collapsed.has(group.repoPath) && renderSessions(group.sessions)}
             </div>
           ))}
         </>
