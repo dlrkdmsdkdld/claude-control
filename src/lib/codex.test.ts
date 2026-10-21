@@ -31,6 +31,16 @@ describe("codexTurnState", () => {
     expect(codexTurnState([ev("task_started"), ev("turn_aborted")]).inTurn).toBe(false);
   });
 
+  it("treats a truncated tail with no turn boundary as a turn still in progress", () => {
+    const midTurn = [
+      item({ type: "custom_tool_call", call_id: "a" }),
+      item({ type: "custom_tool_call_output", call_id: "a" }),
+    ];
+    expect(codexTurnState(midTurn, { truncated: true }).inTurn).toBe(true);
+    expect(codexTurnState(midTurn).inTurn).toBe(false);
+    expect(codexTurnState([...midTurn, ev("task_complete")], { truncated: true }).inTurn).toBe(false);
+  });
+
   it("tracks tool calls without output and the approval policy", () => {
     const state = codexTurnState([
       { type: "turn_context", payload: { approval_policy: "on-request" } },

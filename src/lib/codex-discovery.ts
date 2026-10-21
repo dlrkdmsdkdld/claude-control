@@ -263,7 +263,7 @@ async function buildCodexSession(
     getMainWorktreePath(cwd),
   ]);
 
-  const state = codexTurnState(lines);
+  const state = codexTurnState(lines, { truncated: lines.length >= ROLLOUT_TAIL_LINES });
   const preview = codexPreview(lines);
   const status: SessionStatus =
     lines.length === 0

@@ -40,8 +40,15 @@ function isCall(t: string | undefined): boolean {
   return !!t && t.endsWith("_call");
 }
 
-export function codexTurnState(lines: CodexLine[]): CodexTurnState {
+/**
+ * `truncated`: lines are only the tail of the rollout. A long turn writes more
+ * than the tail holds, so its task_started falls outside it; with no turn
+ * boundary in a truncated tail, the turn is still in progress (after
+ * task_complete Codex writes almost nothing until the next turn).
+ */
+export function codexTurnState(lines: CodexLine[], opts: { truncated?: boolean } = {}): CodexTurnState {
   let inTurn = false;
+  let sawBoundary = false;
   let errored = false;
   let approvalPolicy: string | null = null;
   let pending = new Map<string, { name: string; at: number | null }>();
@@ -52,10 +59,12 @@ export function codexTurnState(lines: CodexLine[]): CodexTurnState {
     if (line.type === "turn_context" && p.approval_policy) approvalPolicy = p.approval_policy;
     if (line.type === "event_msg") {
       if (TURN_START.has(p.type ?? "")) {
+        sawBoundary = true;
         inTurn = true;
         errored = false;
         pending = new Map();
       } else if (TURN_END.has(p.type ?? "")) {
+        sawBoundary = true;
         inTurn = false;
         pending = new Map();
       } else if (p.type === "error" || p.type === "stream_error") {
@@ -70,6 +79,7 @@ export function codexTurnState(lines: CodexLine[]): CodexTurnState {
       }
     }
   }
+  if (!sawBoundary && opts.truncated) inTurn = true;
   return { inTurn, errored: !inTurn && errored, pendingCalls: Array.from(pending.values()), approvalPolicy };
 }
 
