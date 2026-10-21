@@ -84,6 +84,11 @@ export function SessionRow({
             wt
           </span>
         )}
+        {session.agent === "codex" && (
+          <span className="shrink-0 px-1 py-0.5 text-[8px] font-semibold tracking-wider rounded-sm bg-teal-500/10 border border-teal-500/25 text-teal-300">
+            Codex
+          </span>
+        )}
         {(session.host.kind === "vscode-extension" || session.host.kind === "vscode-terminal") && (
           <span className="shrink-0 px-1 py-0.5 text-[8px] font-semibold tracking-wider rounded-sm bg-sky-500/10 border border-sky-500/20 text-sky-400">
             {session.host.kind === "vscode-extension" ? "VS Code" : "VS Code 터미널"}

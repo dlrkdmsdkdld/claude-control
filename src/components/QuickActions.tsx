@@ -48,6 +48,7 @@ export function QuickActions({
   acceptsInput = true,
   canOpenConversation = false,
   editorWorkspace,
+  sharedProcess = false,
 }: {
   path: string;
   pid?: number | null;
@@ -62,6 +63,8 @@ export function QuickActions({
   acceptsInput?: boolean;
   canOpenConversation?: boolean;
   editorWorkspace?: string | null;
+  /** The process hosts other conversations too (Codex app-server) — no end-session button */
+  sharedProcess?: boolean;
 }) {
   const [actionError, setActionError] = useState<{ error: string; hint?: string; tone?: "info" } | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -421,7 +424,8 @@ export function QuickActions({
             />
           </svg>
         </IconButton>
-        {pid && !orphaned && killButton}
+        {/* Codex app-servers host other conversations — only terminal Codex can be ended here */}
+        {pid && !orphaned && !sharedProcess && killButton}
         {onCleanup && (
           <IconButton
             onClick={onCleanup}

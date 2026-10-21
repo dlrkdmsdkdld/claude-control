@@ -5,6 +5,7 @@ import { ClaudeSession } from "./types";
 function makeSession(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
   return {
     id: "sess-1",
+    agent: "claude",
     pid: 1234,
     workingDirectory: "/Users/alli/project",
     repoName: "project",
@@ -36,6 +37,7 @@ function makeSession(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
     editorWorkspace: null,
     canOpenConversation: false,
     acceptsInput: true,
+    sharedProcess: false,
     ...overrides,
   };
 }

@@ -1,6 +1,8 @@
 import { readdir, stat } from "fs/promises";
 import { join } from "path";
 import { configDirLabel, findTranscriptForSession, listClaudeConfigDirs, projectDirFor } from "./claude-config";
+import { discoverCodexSessions } from "./codex-discovery";
+import { type CodexLine, codexLinesToConversation } from "./codex-reader";
 import { ORPHAN_CHECK_INTERVAL_MS } from "./constants";
 import { getGitDiff, getGitSummary, getMainWorktreePath, getPrUrl } from "./git-info";
 import { type HookStatus, readAllHookStatuses } from "./hooks-reader";
@@ -88,7 +90,8 @@ const AWAITING_REPLY_MAX_MS = 5 * 60 * 1000;
 
 /** Sessions whose process exited recently — kept briefly so the card shows "Finished". */
 const FINISHED_RETENTION_MS = 2 * 60 * 1000;
-let previousSessions = new Map<number, ClaudeSession>();
+/** Keyed by `${id}-${pid}`: one Codex process can host several conversations. */
+let previousSessions = new Map<string, ClaudeSession>();
 const recentlyFinished = new Map<string, { session: ClaudeSession; endedAt: number }>();
 
 interface LinkResult {
@@ -243,6 +246,7 @@ async function buildSession(
 
   return {
     id: sessionId,
+    agent: "claude",
     pid: info.pid,
     workingDirectory: info.workingDirectory,
     repoName: repoNameFromPath(info.workingDirectory),
@@ -268,6 +272,7 @@ async function buildSession(
     editorWorkspace,
     canOpenConversation,
     acceptsInput: hostAcceptsTerminalInput(host),
+    sharedProcess: false,
   };
 }
 
@@ -387,23 +392,30 @@ export async function discoverSessions(): Promise<ClaudeSession[]> {
     }),
   );
 
-  const sessions = await Promise.all(
-    contexts.map((ctx, i) =>
-      buildSession(
-        ctx,
-        links[i],
-        processTree,
-        orphanedPids.has(ctx.info.pid),
-        pidTmuxSession.get(ctx.info.pid) ?? null,
+  const [claudeSessions, codexSessions] = await Promise.all([
+    Promise.all(
+      contexts.map((ctx, i) =>
+        buildSession(
+          ctx,
+          links[i],
+          processTree,
+          orphanedPids.has(ctx.info.pid),
+          pidTmuxSession.get(ctx.info.pid) ?? null,
+        ),
       ),
     ),
-  );
+    // Codex failures must never break Claude discovery
+    discoverCodexSessions(processTree).catch(() => [] as ClaudeSession[]),
+  ]);
+  const sessions = [...claudeSessions, ...codexSessions];
 
   // Processes that exited since the last poll: show them as finished for a short while
-  const alive = new Set(sessions.map((s) => s.pid));
+  const sessionKey = (s: ClaudeSession) => `${s.id}-${s.pid}`;
+  const alive = new Set(sessions.map(sessionKey));
   // An empty tree means `ps` failed — don't mistake that for every process exiting
-  for (const [pid, prev] of processTree.size > 0 ? previousSessions : []) {
-    if (!alive.has(pid) && !processTree.has(pid)) {
+  for (const [key, prev] of processTree.size > 0 ? previousSessions : []) {
+    const pid = prev.pid as number;
+    if (!alive.has(key) && !processTree.has(pid)) {
       recentlyFinished.set(prev.id, {
         session: {
           ...prev,
@@ -417,7 +429,7 @@ export async function discoverSessions(): Promise<ClaudeSession[]> {
       });
     }
   }
-  previousSessions = new Map(sessions.map((s) => [s.pid as number, s]));
+  previousSessions = new Map(sessions.map((s) => [sessionKey(s), s]));
   const liveIds = new Set(sessions.map((s) => s.id));
   for (const [id, entry] of recentlyFinished) {
     if (now - entry.endedAt > FINISHED_RETENTION_MS || liveIds.has(id)) recentlyFinished.delete(id);
@@ -453,7 +465,10 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
 
   if (session.jsonlPath) {
     const allLines = await readFullConversation(session.jsonlPath);
-    conversation = linesToConversation(allLines);
+    conversation =
+      session.agent === "codex"
+        ? codexLinesToConversation(allLines as unknown as CodexLine[])
+        : linesToConversation(allLines);
   }
 
   gitDiff = await getGitDiff(session.workingDirectory);

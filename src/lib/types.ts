@@ -33,12 +33,17 @@ export interface SessionHost {
  * - hook: claude-control status hook event keyed by PID
  * - args: --resume / --session-id on the command line
  * - inferred: the only unlinked process in that project, transcript written after it started
+ * - lock: Codex thread-writer lock held by the process
  * - null: no evidence — transcript not linked
  */
-export type TranscriptLinkSource = "registry" | "hook" | "args" | "inferred";
+export type TranscriptLinkSource = "registry" | "hook" | "args" | "inferred" | "lock";
+
+export type SessionAgent = "claude" | "codex";
 
 export interface ClaudeSession {
   id: string;
+  /** Which coding agent runs the session */
+  agent: SessionAgent;
   pid: number | null;
   workingDirectory: string;
   repoName: string | null;
@@ -70,6 +75,8 @@ export interface ClaudeSession {
   canOpenConversation: boolean;
   /** Whether typed input (Create PR, quick reply) can be delivered */
   acceptsInput: boolean;
+  /** The process also hosts other conversations (Codex app-server) — never end it from here */
+  sharedProcess: boolean;
 }
 
 export interface GitSummary {

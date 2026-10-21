@@ -75,6 +75,7 @@ export default function SessionDetailPage() {
             acceptsInput={session.acceptsInput}
             canOpenConversation={session.canOpenConversation}
             editorWorkspace={session.editorWorkspace}
+            sharedProcess={session.sharedProcess}
           />
         </div>
       </div>

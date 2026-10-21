@@ -10,17 +10,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing or invalid pid" }, { status: 400 });
     }
 
-    if (!(await isClaudeProcess(pid))) {
-      return NextResponse.json({ error: "PID is not a claude process" }, { status: 403 });
+    const session = await findLiveSession(pid);
+
+    // A Codex app-server (VS Code extension, ChatGPT app) hosts other
+    // conversations too — never end it. Terminal Codex TUIs are fine.
+    if (session?.sharedProcess) {
+      return NextResponse.json(
+        {
+          error:
+            "이 Codex 세션은 다른 대화와 프로세스를 공유하므로 여기서 종료할 수 없습니다. 해당 앱에서 닫아 주세요.",
+        },
+        { status: 409 },
+      );
     }
 
     // Close the tab/pane hosting the session (never the whole app)
-    if (closeTab) {
-      const session = await findLiveSession(pid);
-      if (session) {
-        const result = await closeSessionTab(session);
-        return NextResponse.json({ ok: true, ...result });
-      }
+    if (closeTab && session) {
+      const result = await closeSessionTab(session);
+      return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (!(await isClaudeProcess(pid))) {
+      return NextResponse.json({ error: "PID is not a claude process" }, { status: 403 });
     }
 
     try {

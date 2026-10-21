@@ -72,12 +72,21 @@ function SessionOrigin({ session }: { session: ClaudeSession }) {
       : HOST_LABELS[session.host.kind];
   return (
     <div className="flex items-center gap-1.5 mt-1 text-[10px] text-zinc-500 min-w-0">
+      {session.agent === "codex" && (
+        <span className="shrink-0 px-1.5 py-px rounded-sm bg-teal-500/10 border border-teal-500/25 text-teal-300 font-semibold">
+          Codex
+        </span>
+      )}
       <span className="shrink-0 px-1.5 py-px rounded-sm bg-white/4 border border-white/6">{host}</span>
       {session.configDir && <span className="truncate font-(family-name:--font-geist-mono)">{session.configDir}</span>}
       {session.linkSource === "inferred" && (
         <span
           className="shrink-0 has-tooltip text-amber-400/80"
-          data-tip="세션 ID 근거가 없어 프로젝트의 유일한 미연결 세션으로 추정 연결했습니다"
+          data-tip={
+            session.agent === "codex"
+              ? "같은 폴더에 Codex 터미널이 여러 개라 어느 탭인지 추정했습니다"
+              : "세션 ID 근거가 없어 프로젝트의 유일한 미연결 세션으로 추정 연결했습니다"
+          }
         >
           추정 연결
         </span>
@@ -123,7 +132,9 @@ export function SessionCard({
   onCancelEdit?: () => void;
 }) {
   const isSuppressed = !!actedOn;
-  const showQuickReply = session.status === "waiting" && session.pid && !isSuppressed && session.acceptsInput;
+  // Quick reply keystrokes are Claude-specific (Codex approvals use different keys)
+  const showQuickReply =
+    session.status === "waiting" && session.pid && !isSuppressed && session.acceptsInput && session.agent === "claude";
   const waitingInApp = session.status === "waiting" && !session.acceptsInput;
   const displayStatus = isSuppressed ? (actedOn!.action === "reject" ? "idle" : "working") : session.status;
   const styles = cardStyles[displayStatus];
@@ -360,6 +371,7 @@ export function SessionCard({
               acceptsInput={session.acceptsInput}
               canOpenConversation={session.canOpenConversation}
               editorWorkspace={session.editorWorkspace}
+              sharedProcess={session.sharedProcess}
             />
           )}
         </div>
