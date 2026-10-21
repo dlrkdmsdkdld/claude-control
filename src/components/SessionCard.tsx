@@ -24,34 +24,34 @@ function timeAgo(iso: string): string {
 
 const cardStyles: Record<SessionStatus, { border: string; glow: string; accent: string }> = {
   working: {
-    border: "border-emerald-500/20 hover:border-emerald-500/40",
+    border: "border-emerald-500/45 hover:border-emerald-400/70",
     glow: "glow-green",
-    accent: "from-emerald-500/7 to-transparent",
+    accent: "from-emerald-500/15 to-transparent",
   },
   idle: {
-    border: "border-amber-500/15 hover:border-amber-500/30",
+    border: "border-amber-500/35 hover:border-amber-400/60",
     glow: "glow-yellow",
-    accent: "from-amber-500/5 to-transparent",
+    accent: "from-amber-500/10 to-transparent",
   },
   waiting: {
-    border: "border-blue-500/20 hover:border-blue-500/40",
+    border: "border-blue-500/45 hover:border-blue-400/70",
     glow: "glow-blue",
-    accent: "from-blue-500/7 to-transparent",
+    accent: "from-blue-500/15 to-transparent",
   },
   errored: {
-    border: "border-red-500/20 hover:border-red-500/40",
+    border: "border-red-500/45 hover:border-red-400/70",
     glow: "glow-red",
-    accent: "from-red-500/7 to-transparent",
+    accent: "from-red-500/15 to-transparent",
   },
   finished: {
-    border: "border-zinc-700/30 hover:border-zinc-600/50",
+    border: "border-zinc-600/60 hover:border-zinc-500/80",
     glow: "glow-zinc",
-    accent: "from-zinc-500/3 to-transparent",
+    accent: "from-zinc-400/8 to-transparent",
   },
   unknown: {
-    border: "border-zinc-600/30 border-dashed hover:border-zinc-500/50",
+    border: "border-zinc-500/60 border-dashed hover:border-zinc-400/80",
     glow: "",
-    accent: "from-zinc-500/3 to-transparent",
+    accent: "from-zinc-400/8 to-transparent",
   },
 };
 
@@ -77,7 +77,7 @@ function SessionOrigin({ session }: { session: ClaudeSession }) {
           Codex
         </span>
       )}
-      <span className="shrink-0 px-1.5 py-px rounded-sm bg-white/4 border border-white/6">{host}</span>
+      <span className="shrink-0 px-1.5 py-px rounded-sm bg-white/4 border border-white/12">{host}</span>
       {session.configDir && <span className="truncate font-(family-name:--font-geist-mono)">{session.configDir}</span>}
       {session.linkSource === "inferred" && (
         <span
@@ -186,7 +186,7 @@ export function SessionCard({
 
   if (cleanupState === "done") {
     return (
-      <div className="relative block rounded-xl border border-zinc-800/20 bg-[#0a0a0f]/40 p-5 card-fade-out">
+      <div className="relative block rounded-xl border border-zinc-800/20 bg-[#1c1d24]/40 p-5 card-fade-out">
         <div className="flex flex-col items-center justify-center py-8 text-zinc-600">
           <svg
             className="w-8 h-8 mb-2 text-emerald-500/50"
@@ -211,7 +211,7 @@ export function SessionCard({
     <div className="relative">
       <div
         onClick={onSelect}
-        className={`group relative flex flex-col rounded-xl border bg-[#0a0a0f]/80 backdrop-blur-xs p-5 card-hover cursor-pointer transition-opacity duration-200 ${selected ? "ring-2 ring-blue-400 border-blue-400/50 shadow-[0_0_30px_rgba(96,165,250,0.25),0_0_60px_rgba(96,165,250,0.10)] scale-[1.02]" : styles.border} ${!selected && !isStale ? styles.glow : ""} ${pulse ? "attention-pulse" : ""} ${cleanupState === "cleaning" ? "opacity-50 pointer-events-none" : ""} ${isStale && !selected ? "opacity-60 hover:opacity-100" : ""}`}
+        className={`group relative flex flex-col rounded-xl border bg-[#1c1d24]/80 backdrop-blur-xs p-5 card-hover cursor-pointer transition-opacity duration-200 ${selected ? "ring-2 ring-blue-400 border-blue-400/50 shadow-[0_0_30px_rgba(96,165,250,0.25),0_0_60px_rgba(96,165,250,0.10)] scale-[1.02]" : styles.border} ${!selected && !isStale ? styles.glow : ""} ${pulse ? "attention-pulse" : ""} ${cleanupState === "cleaning" ? "opacity-50 pointer-events-none" : ""} ${isStale && !selected ? "opacity-60 hover:opacity-100" : ""}`}
       >
         {/* Gradient accent at top */}
         <div
@@ -242,7 +242,7 @@ export function SessionCard({
               <div className="flex items-center gap-2">
                 {shortcutNumber !== undefined && (
                   <span
-                    className={`shrink-0 flex items-center justify-center rounded-sm font-bold font-(family-name:--font-geist-mono) transition-all duration-150 ${selected ? "w-6 h-6 text-[11px] bg-blue-500 text-white shadow-[0_0_12px_rgba(96,165,250,0.5)]" : "w-5 h-5 text-[10px] bg-white/4 border border-white/6 text-zinc-600"}`}
+                    className={`shrink-0 flex items-center justify-center rounded-sm font-bold font-(family-name:--font-geist-mono) transition-all duration-150 ${selected ? "w-6 h-6 text-[11px] bg-blue-500 text-white shadow-[0_0_12px_rgba(96,165,250,0.5)]" : "w-5 h-5 text-[10px] bg-white/4 border border-white/12 text-zinc-600"}`}
                   >
                     {shortcutNumber}
                   </span>
@@ -340,7 +340,7 @@ export function SessionCard({
               </span>
               <button
                 onClick={cancelCleanup}
-                className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 bg-white/4 hover:bg-white/8 border border-white/7 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs text-zinc-500 hover:text-zinc-300 bg-white/4 hover:bg-white/8 border border-white/14 transition-colors"
               >
                 Cancel
               </button>

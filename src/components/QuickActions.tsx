@@ -5,7 +5,7 @@ import { useSettings } from "@/hooks/useSettings";
 import type { SessionHost } from "@/lib/types";
 
 const iconBtnClass =
-  "flex items-center justify-center h-8 rounded-lg bg-white/4 hover:bg-white/10 border border-white/7 hover:border-white/15 text-zinc-500 hover:text-zinc-200 transition-all duration-150";
+  "flex items-center justify-center h-8 rounded-lg bg-white/4 hover:bg-white/10 border border-white/14 hover:border-white/15 text-zinc-500 hover:text-zinc-200 transition-all duration-150";
 
 function IconButton({
   onClick,
@@ -239,7 +239,7 @@ export function QuickActions({
       className={`flex-1 flex items-center justify-center h-8 rounded-lg ${
         killing || killArmed
           ? "bg-orange-500/10 border-orange-500/20 text-orange-400"
-          : "bg-white/4 hover:bg-orange-500/12 border border-white/7 hover:border-orange-500/25 text-zinc-500 hover:text-orange-400"
+          : "bg-white/4 hover:bg-orange-500/12 border border-white/14 hover:border-orange-500/25 text-zinc-500 hover:text-orange-400"
       } transition-all duration-150`}
     >
       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -267,7 +267,7 @@ export function QuickActions({
             className={`flex-1 flex items-center justify-center h-8 rounded-lg border transition-all duration-150 ${
               prSending
                 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : "bg-white/4 hover:bg-white/10 border-white/7 hover:border-white/15 text-zinc-500 hover:text-zinc-200"
+                : "bg-white/4 hover:bg-white/10 border-white/14 hover:border-white/15 text-zinc-500 hover:text-zinc-200"
             }`}
           >
             {prIcon}
@@ -283,7 +283,7 @@ export function QuickActions({
                 className={`flex-1 flex items-center justify-center h-8 rounded-lg ${
                   reattaching
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                    : "bg-white/4 hover:bg-emerald-500/12 border border-white/7 hover:border-emerald-500/25 text-zinc-500 hover:text-emerald-400"
+                    : "bg-white/4 hover:bg-emerald-500/12 border border-white/14 hover:border-emerald-500/25 text-zinc-500 hover:text-emerald-400"
                 } transition-all duration-150`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

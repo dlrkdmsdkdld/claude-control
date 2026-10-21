@@ -46,7 +46,7 @@ export function SessionRow({
       className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-100 ${
         selected
           ? "bg-blue-500/8 border border-blue-400/30 shadow-[0_0_20px_rgba(96,165,250,0.1)]"
-          : "bg-white/2 border border-transparent hover:bg-white/4 hover:border-white/6"
+          : "bg-white/2 border border-transparent hover:bg-white/4 hover:border-white/12"
       } ${isStale && !selected ? "opacity-55 hover:opacity-100" : ""}`}
     >
       {/* Shortcut number */}
@@ -55,7 +55,7 @@ export function SessionRow({
           className={`shrink-0 flex items-center justify-center rounded-sm font-bold font-(family-name:--font-geist-mono) ${
             selected
               ? "w-5 h-5 text-[10px] bg-blue-500 text-white"
-              : "w-5 h-5 text-[10px] bg-white/4 border border-white/6 text-zinc-600"
+              : "w-5 h-5 text-[10px] bg-white/4 border border-white/12 text-zinc-600"
           }`}
         >
           {shortcutNumber}
@@ -158,7 +158,7 @@ export function SessionRow({
           </button>
           <button
             onClick={() => onApproveReject("reject")}
-            className="flex items-center justify-center w-6 h-6 rounded-md bg-white/4 hover:bg-red-500/15 border border-white/7 hover:border-red-500/25 text-zinc-500 hover:text-red-400 transition-colors"
+            className="flex items-center justify-center w-6 h-6 rounded-md bg-white/4 hover:bg-red-500/15 border border-white/14 hover:border-red-500/25 text-zinc-500 hover:text-red-400 transition-colors"
             title="Reject"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>

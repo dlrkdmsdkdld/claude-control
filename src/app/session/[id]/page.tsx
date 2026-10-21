@@ -82,11 +82,11 @@ export default function SessionDetailPage() {
 
       {/* Git panel */}
       {session.git && (
-        <div className="mb-6 p-5 rounded-xl bg-[#0a0a0f]/80 border border-zinc-800/50 backdrop-blur-xs">
+        <div className="mb-6 p-5 rounded-xl bg-[#1c1d24]/80 border border-zinc-800/50 backdrop-blur-xs">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Git Status</h2>
           <GitSummary git={session.git} />
           {session.gitDiff && (
-            <pre className="mt-4 p-3 rounded-lg bg-black/30 text-xs text-zinc-400 font-(family-name:--font-geist-mono) whitespace-pre-wrap overflow-x-auto border border-white/4">
+            <pre className="mt-4 p-3 rounded-lg bg-black/30 text-xs text-zinc-400 font-(family-name:--font-geist-mono) whitespace-pre-wrap overflow-x-auto border border-white/8">
               {session.gitDiff}
             </pre>
           )}
@@ -94,7 +94,7 @@ export default function SessionDetailPage() {
       )}
 
       {/* Conversation panel */}
-      <div className="p-5 rounded-xl bg-[#0a0a0f]/80 border border-zinc-800/50 backdrop-blur-xs">
+      <div className="p-5 rounded-xl bg-[#1c1d24]/80 border border-zinc-800/50 backdrop-blur-xs">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-4">Conversation</h2>
         <ConversationView messages={session.conversation} />
       </div>

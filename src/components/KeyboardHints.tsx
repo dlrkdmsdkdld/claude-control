@@ -41,7 +41,7 @@ export function KeyboardHints({
   return (
     <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
       <div className="max-w-7xl mx-auto px-6 pb-4">
-        <div className="relative flex items-center justify-center gap-4 flex-wrap px-4 py-2 rounded-xl bg-[#0a0a0f]/90 backdrop-blur-md border border-white/6 pointer-events-auto">
+        <div className="relative flex items-center justify-center gap-4 flex-wrap px-4 py-2 rounded-xl bg-[#1c1d24]/90 backdrop-blur-md border border-white/12 pointer-events-auto">
           {actionFeedback ? (
             <span
               className={`text-xs font-medium cleanup-slide-in ${

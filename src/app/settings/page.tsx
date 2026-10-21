@@ -92,7 +92,7 @@ function Toggle({
   description: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-4 border-b border-white/4 last:border-0">
+    <div className="flex items-center justify-between py-4 border-b border-white/8 last:border-0">
       <div>
         <h3 className="text-sm font-medium text-zinc-200">{label}</h3>
         <p className="text-xs text-zinc-500 mt-0.5">{description}</p>
@@ -123,7 +123,7 @@ function SettingRow<T extends OptionDef>({
   onChange: (val: string) => void;
 }) {
   return (
-    <div className="flex items-center justify-between py-4 border-b border-white/4">
+    <div className="flex items-center justify-between py-4 border-b border-white/8">
       <div className="flex-1 min-w-0 mr-4">
         <h3 className="text-sm font-medium text-zinc-200">{label}</h3>
         <p className="text-xs text-zinc-500 mt-0.5">{description}</p>
@@ -388,7 +388,7 @@ export default function SettingsPage() {
       {/* Version section */}
       {versionInfo && (
         <section className="mb-10">
-          <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5 py-4">
+          <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-sm text-zinc-500">Version</span>
@@ -427,11 +427,11 @@ export default function SettingsPage() {
       {/* Dependencies section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Dependencies</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5">
           {data.dependencies.map((dep, i) => (
             <div
               key={dep.id}
-              className={`flex items-center justify-between py-4 ${i < data.dependencies.length - 1 ? "border-b border-white/4" : ""}`}
+              className={`flex items-center justify-between py-4 ${i < data.dependencies.length - 1 ? "border-b border-white/8" : ""}`}
             >
               <div className="flex items-center gap-3">
                 <span className={`w-2 h-2 rounded-full shrink-0 ${dep.installed ? "bg-emerald-400" : "bg-red-400"}`} />
@@ -445,7 +445,7 @@ export default function SettingsPage() {
                   href={dep.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="shrink-0 ml-4 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/7 hover:border-white/15 transition-colors"
+                  className="shrink-0 ml-4 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/14 hover:border-white/15 transition-colors"
                 >
                   Install
                 </a>
@@ -458,7 +458,7 @@ export default function SettingsPage() {
       {/* Tools section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Tools</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5">
           <SettingRow
             label="Browser"
             description="Used for opening pull request links"
@@ -479,7 +479,7 @@ export default function SettingsPage() {
           {data.options.editors
             .filter((ed) => APP_PATH_EDITORS.includes(ed.id))
             .map((ed) => (
-              <div key={ed.id} className="flex items-center justify-between py-4 border-b border-white/4">
+              <div key={ed.id} className="flex items-center justify-between py-4 border-b border-white/8">
                 <div className="flex-1 min-w-0 mr-4">
                   <h3 className="text-sm font-medium text-zinc-200">{ed.label} 앱 위치</h3>
                   {ed.appError ? (
@@ -504,14 +504,14 @@ export default function SettingsPage() {
                   {data.config.editorAppPaths?.[ed.id] && (
                     <button
                       onClick={() => setEditorAppPath(ed.id, null)}
-                      className="px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/7"
+                      className="px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/14"
                     >
                       자동 감지
                     </button>
                   )}
                   <button
                     onClick={() => pickEditorApp(ed.id)}
-                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-300 hover:text-white bg-white/4 hover:bg-white/8 border border-white/7"
+                    className="px-3 py-1.5 rounded-lg text-xs text-zinc-300 hover:text-white bg-white/4 hover:bg-white/8 border border-white/14"
                   >
                     선택…
                   </button>
@@ -531,7 +531,7 @@ export default function SettingsPage() {
       {/* Terminal section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Terminal</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5">
           <SettingRow
             label="Terminal App"
             description="Which terminal to use for focusing sessions and creating new ones"
@@ -567,7 +567,7 @@ export default function SettingsPage() {
       {/* Notifications section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Notifications</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5">
           <Toggle
             label="Desktop Notifications"
             description="Show a macOS notification when a session finishes working"
@@ -592,8 +592,8 @@ export default function SettingsPage() {
       {/* Display section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Display</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5">
-          <div className="flex items-center justify-between py-4 border-b border-white/4">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5">
+          <div className="flex items-center justify-between py-4 border-b border-white/8">
             <div>
               <h3 className="text-sm font-medium text-zinc-200">Target Screen</h3>
               <p className="text-xs text-zinc-500 mt-0.5">Which screen to open apps on when using quick actions</p>
@@ -640,7 +640,7 @@ export default function SettingsPage() {
       {/* Session defaults section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Session Defaults</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5 py-4 space-y-5">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5 py-4 space-y-5">
           <div>
             <h3 className="text-sm font-medium text-zinc-200">Claude Command</h3>
             <p className="text-xs text-zinc-500 mt-0.5 mb-2">
@@ -698,7 +698,7 @@ export default function SettingsPage() {
       {/* Cleanup section */}
       <section className="mb-10">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Cleanup</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5">
           <Toggle
             label="Close Related Tabs"
             description="When cleaning up a session, also close its terminal tab, git GUI tab, and PR browser tab. Closing git GUI tabs requires accessibility permission."
@@ -711,7 +711,7 @@ export default function SettingsPage() {
       {/* Code directories section */}
       <section>
         <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">Code Directories</h2>
-        <div className="rounded-xl border border-white/6 bg-[#0a0a0f]/80 px-5 py-3">
+        <div className="rounded-xl border border-white/12 bg-[#1c1d24]/80 px-5 py-3">
           <p className="text-xs text-zinc-500 mb-3">
             Folders that are scanned for git repositories when creating new sessions.
           </p>
@@ -720,7 +720,7 @@ export default function SettingsPage() {
               {data.config.codeDirectories.map((dir) => (
                 <div
                   key={dir}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/3 border border-white/4"
+                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/3 border border-white/8"
                 >
                   <span className="text-sm text-zinc-300 font-mono truncate">{dir}</span>
                   <button
@@ -741,7 +741,7 @@ export default function SettingsPage() {
           <button
             onClick={addDirectory}
             disabled={addingDir}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/7 hover:border-white/15 transition-colors disabled:opacity-40"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 bg-white/4 hover:bg-white/8 border border-white/14 hover:border-white/15 transition-colors disabled:opacity-40"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

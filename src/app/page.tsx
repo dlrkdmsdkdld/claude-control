@@ -371,7 +371,7 @@ export default function Dashboard() {
       {updateInfo && !updateDismissed && (
         <div className="fixed top-12 inset-x-0 z-40 pointer-events-none">
           <div className="max-w-md mx-auto px-6">
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#0a0a0f]/95 backdrop-blur-md border border-amber-500/20 pointer-events-auto shadow-lg shadow-black/30">
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#1c1d24]/95 backdrop-blur-md border border-amber-500/20 pointer-events-auto shadow-lg shadow-black/30">
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-zinc-200">
                   Version <span className="font-medium text-amber-400">{updateInfo.latest}</span> is available
@@ -401,7 +401,7 @@ export default function Dashboard() {
       {dismissToast && (
         <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none">
           <div className="max-w-7xl mx-auto px-6 pb-4">
-            <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#0a0a0f]/90 backdrop-blur-md border border-white/6 pointer-events-auto text-xs text-zinc-500">
+            <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#1c1d24]/90 backdrop-blur-md border border-white/12 pointer-events-auto text-xs text-zinc-500">
               Keyboard hints hidden. Re-enable in{" "}
               <Link
                 href="/settings"

@@ -11,7 +11,7 @@ function MessageBubble({ message }: { message: ConversationMessage }) {
         className={`max-w-[85%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
           isUser
             ? "bg-blue-600/20 border border-blue-500/20 text-blue-100"
-            : "bg-white/3 border border-white/6 text-zinc-300"
+            : "bg-white/3 border border-white/12 text-zinc-300"
         }`}
       >
         {message.text && <p className="whitespace-pre-wrap wrap-break-word">{message.text}</p>}

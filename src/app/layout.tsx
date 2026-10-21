@@ -30,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-(family-name:--font-geist-sans) antialiased bg-[#050508] text-zinc-100 min-h-screen bg-grid`}
+        className={`${geistSans.variable} ${geistMono.variable} font-(family-name:--font-geist-sans) antialiased bg-[#121318] text-zinc-100 min-h-screen bg-grid`}
       >
         <div className="min-h-screen">
           {/* Draggable title bar for Electron (invisible in browser) */}
